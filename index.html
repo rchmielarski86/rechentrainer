@@ -6,14 +6,18 @@
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#f7fafd">
 <title>Rechentrainer</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="symbole/symbol-192.png">
+<link rel="apple-touch-icon" href="symbole/symbol-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preload" href="schrift/andika-700.woff2" as="font" type="font/woff2" crossorigin>
 <style>
 @font-face { font-family: Andika; src: url(schrift/andika-400.woff2) format('woff2'); font-weight: 400; font-display: swap; }
 @font-face { font-family: Andika; src: url(schrift/andika-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
 :root {
   color-scheme: light;
-  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c; --gruen: #12804f;
+  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c; --gruen: #12804f; --s1: #cdd8f4; --s2: #7d95e0;
   --k: min(calc(100vw / 18), calc(100vh / 33), 26px);
 }
 @supports (height: 100svh) { :root { --k: min(calc(100vw / 18), calc(100svh / 33), 26px); } }
@@ -67,11 +71,23 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 #pad button:active { background: var(--marker); }
 #pad button:last-child { grid-column: 2; }
 
-#ende h1 { margin-top: calc(var(--k) * 4); }
+#ende h1 { margin-top: var(--k); }
 #ende p { margin: var(--k) 0 0; }
 #ende .blitze { display: flex; align-items: center; gap: calc(var(--k) * 0.5); margin: var(--k) 0 0; font-weight: 700; font-size: calc(var(--k) * 1.6); color: var(--tinte); }
 #ende .blitze svg { width: calc(var(--k) * 2); height: calc(var(--k) * 2); fill: var(--tinte); }
-#ende .block { margin-top: calc(var(--k) * 2); }
+#ende .block { margin-top: calc(var(--k) * 1.5); }
+.tafeln { display: flex; gap: calc(var(--k) * 2); margin-top: var(--k); }
+.tafeln b { display: block; margin-bottom: calc(var(--k) * 0.3); color: var(--tinte); }
+.tafel { display: grid; grid-template-columns: repeat(8, calc(var(--k) * 0.85)); }
+.tafel i { height: calc(var(--k) * 0.85); background: #fff; box-shadow: inset 0 0 0 1px var(--karo); }
+.tafel i.s1 { background: var(--s1); }
+.tafel i.s2 { background: var(--s2); }
+.tafel i.s3 { background: var(--tinte); }
+
+#anmeldung h1 { margin: calc(var(--k) * 3) 0 calc(var(--k) * 2); }
+#anmeldung label { display: block; margin-bottom: var(--k); font-weight: 700; }
+#anmeldung input { display: block; width: 100%; height: calc(var(--k) * 2.6); margin-top: calc(var(--k) * 0.2); padding: 0 calc(var(--k) * 0.5); border: 2px solid var(--tinte); border-radius: calc(var(--k) * 0.3); background: #fff; color: var(--blei); font: inherit; }
+#anmeldehinweis { min-height: calc(var(--k) * 3); margin: var(--k) 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .gleichung::before { transition: none; }
@@ -80,7 +96,17 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 </head>
 <body>
 <main>
-  <section id="start">
+  <section id="anmeldung" hidden>
+    <h1>Rechentrainer</h1>
+    <form id="anmeldeform">
+      <label>E-Mail<input id="email" type="email" autocomplete="username" required></label>
+      <label>Passwort<input id="passwort" type="password" autocomplete="current-password" required></label>
+      <button class="block" type="submit">Anmelden</button>
+      <p id="anmeldehinweis" role="status"></p>
+    </form>
+  </section>
+
+  <section id="start" hidden>
     <h1>Rechentrainer</h1>
     <div class="gleichung" aria-hidden="true" id="vorne"></div>
     <p id="anrede"></p>
@@ -100,18 +126,22 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
     <div class="blitze" id="blitze" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg><span id="blitzzahl"></span>
     </div>
+    <div class="tafeln">
+      <div><b>Plus</b><div class="tafel" id="tafelPlus" aria-hidden="true"></div></div>
+      <div><b>Mal</b><div class="tafel" id="tafelMal" aria-hidden="true"></div></div>
+    </div>
     <p id="ausblick"></p>
     <button class="block" id="mehr">Noch eine Runde</button>
   </section>
 </main>
 
 <script src="kern.js"></script>
+<script src="netz.js"></script>
 <script>
 'use strict';
-const EINSTELLUNG = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
+const GRUNDWERTE = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
 const NACH_ABTIPPEN_MS = 700;
 const WACHE_MS = 6000;
-const SPEICHER = 'rechentrainer-v1';
 const BLITZ = '<svg id="blitz" viewBox="0 0 24 24" aria-label="Blitzschnell"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>';
 const HOEREN = '<svg id="hoeren" viewBox="0 0 24 24" aria-label="Hör zu"><path class="voll" d="M3 9v6h4l6 5V4L7 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
 
@@ -120,17 +150,41 @@ const warte = (ms) => new Promise((r) => setTimeout(r, ms));
 const zeige = (id) => document.querySelectorAll('section').forEach((s) => { s.hidden = s.id !== id; });
 const kannSprechen = 'speechSynthesis' in window;
 
+const speicherName = () => `rechentrainer-v2-${Netz.nutzer()}`;
 function lade() {
-  const leer = { staende: {}, versuche: [], tag: { datum: '', neu: 0 } };
-  try { return { ...leer, ...JSON.parse(localStorage.getItem(SPEICHER)) }; } catch { return leer; }
+  const leer = { staende: {}, offen: [], tag: { datum: '', neu: 0 }, einstellung: { ...GRUNDWERTE } };
+  try { return { ...leer, ...JSON.parse(localStorage.getItem(speicherName())) }; } catch { return leer; }
 }
 function speichere() {
-  try { localStorage.setItem(SPEICHER, JSON.stringify(z)); } catch { /* läuft dann nur im Speicher weiter */ }
+  try { localStorage.setItem(speicherName(), JSON.stringify(z)); } catch { /* läuft dann nur im Speicher weiter */ }
 }
 
-const z = lade();
 const gehalten = [];
-let stimme = null, tipp = null, runde = null, sitzung = '', gerechnet = 0, blitze = 0;
+let z = null, stimme = null, tipp = null, runde = null, sitzung = '', gerechnet = 0, blitze = 0;
+let rundeAktiv = false, abgleichLaeuft = false;
+
+// Erst Offenes senden, dann den Stand vom Server übernehmen. Ohne Netz bleibt alles lokal und geht später raus.
+async function synchronisiere() {
+  if (abgleichLaeuft || !Netz.angemeldet()) return;
+  abgleichLaeuft = true;
+  try {
+    const paket = z.offen.slice();
+    if (paket.length) {
+      await Netz.sendeVersuche(paket);
+      z.offen = z.offen.slice(paket.length);
+      speichere();
+    }
+    const [staende, einstellung] = await Promise.all([Netz.holeStaende(), Netz.holeEinstellung()]);
+    if (!rundeAktiv && !z.offen.length) {
+      z.staende = staende;
+      if (einstellung) z.einstellung = einstellung;
+      speichere();
+      if (!$('start').hidden) zeigeStart();
+    }
+  } catch { /* nächster Versuch beim nächsten Abgleich */ }
+  abgleichLaeuft = false;
+  if (!Netz.angemeldet() && !rundeAktiv) zeige('anmeldung');
+}
 
 function tagesstand() {
   const datum = Kern.heute();
@@ -267,7 +321,7 @@ async function stelle(e, spur) {
       const t = tipp;
       tipp = null;
       t.fertig(t);
-    }, EINSTELLUNG.zeitlimit_ms);
+    }, z.einstellung.zeitlimit_ms);
   });
   const t = await antwort;
   if (ansageEnde === null && kannSprechen) speechSynthesis.cancel();
@@ -282,9 +336,9 @@ async function stelle(e, spur) {
   if (warNeu && ergebnis !== 'schnell') z.tag.neu += 1;
   Kern.verbuche(runde, e, ergebnis, warNeu);
   const neu = z.staende[e.karte.id];
-  z.versuche.push({
+  z.offen.push({
     id: crypto.randomUUID(), sitzung, karte: e.karte.id, gezeigt: a.zeige, antwort: zahl, ergebnis,
-    ms: zeitUm ? EINSTELLUNG.zeitlimit_ms : Math.max(0, Math.round(t.erste - ansageEnde)),
+    ms: zeitUm ? z.einstellung.zeitlimit_ms : Math.max(0, Math.round(t.erste - ansageEnde)),
     stufe_nach: neu.stufe, faellig_am: neu.faellig, beantwortet_am: new Date().toISOString(),
   });
   speichere();
@@ -315,8 +369,9 @@ async function spiele() {
 function starten() {
   const datum = tagesstand();
   if (kannSprechen && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
-  runde = Kern.starteRunde(z.staende, EINSTELLUNG, datum, z.tag.neu, Math.random);
+  runde = Kern.starteRunde(z.staende, z.einstellung, datum, z.tag.neu, Math.random);
   sitzung = crypto.randomUUID();
+  rundeAktiv = true;
   gerechnet = 0;
   blitze = 0;
   zeige('runde');
@@ -324,17 +379,30 @@ function starten() {
 }
 
 function istMehrDa() {
-  return Kern.istMehrDa(z.staende, tagesstand(), z.tag.neu, EINSTELLUNG);
+  return Kern.istMehrDa(z.staende, tagesstand(), z.tag.neu, z.einstellung);
+}
+
+function zeichneTafel(ziel, zeichen) {
+  ziel.replaceChildren(...Kern.ZAHLEN.flatMap((a) => Kern.ZAHLEN.map((b) => {
+    const stand = z.staende[`${zeichen}_${Math.min(a, b)}_${Math.max(a, b)}`];
+    const q = document.createElement('i');
+    if (stand) q.className = `s${Math.ceil(stand.stufe / 2)}`;
+    return q;
+  })));
 }
 
 function zeigeEnde() {
+  rundeAktiv = false;
   const mehr = istMehrDa();
+  zeichneTafel($('tafelPlus'), 'p');
+  zeichneTafel($('tafelMal'), 'x');
   $('bilanz').textContent = gerechnet === 1 ? 'Du hast 1 Aufgabe gerechnet.' : `Du hast ${gerechnet} Aufgaben gerechnet.`;
   $('blitzzahl').textContent = blitze;
   $('blitze').hidden = blitze === 0;
   $('ausblick').textContent = mehr ? '' : 'Morgen geht es weiter.';
   $('mehr').hidden = !mehr;
   zeige('ende');
+  synchronisiere();
 }
 
 function zeigeStart() {
@@ -354,10 +422,40 @@ function zeigeStart() {
 });
 document.addEventListener('keydown', (e) => { if (/^[0-9]$/.test(e.key) && !e.repeat) ziffer(e.key, e.timeStamp); });
 
-if (kannSprechen) stimmenLaden().then((alle) => { stimme = waehle(alle); });
+$('anmeldeform').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const hinweis = $('anmeldehinweis');
+  hinweis.textContent = 'Einen Moment …';
+  try {
+    if (!(await Netz.anmelden($('email').value.trim(), $('passwort').value))) {
+      hinweis.textContent = 'E-Mail oder Passwort stimmt nicht.';
+      return;
+    }
+  } catch {
+    hinweis.textContent = 'Keine Verbindung. Bitte prüfen und noch einmal versuchen.';
+    return;
+  }
+  $('passwort').value = '';
+  hinweis.textContent = '';
+  z = lade();
+  await synchronisiere();
+  zeigeStart();
+});
 $('los').addEventListener('click', starten);
 $('mehr').addEventListener('click', starten);
-zeigeStart();
+window.addEventListener('online', () => { if (z) synchronisiere(); });
+document.addEventListener('visibilitychange', () => { if (z && !document.hidden) synchronisiere(); });
+
+if (kannSprechen) stimmenLaden().then((alle) => { stimme = waehle(alle); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+try { localStorage.removeItem('rechentrainer-v1'); } catch { /* ohne Speicher gibt es nichts aufzuräumen */ }
+if (Netz.angemeldet()) {
+  z = lade();
+  zeigeStart();
+  synchronisiere();
+} else {
+  zeige('anmeldung');
+}
 </script>
 </body>
 </html>

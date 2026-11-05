@@ -1,23 +1,9 @@
 // Spielt die Übungsrunde im kleinen Handyformat durch. Aufruf: node pruefung/runde.js
-const { chromium } = require('playwright');
-const fs = require('fs');
-const http = require('http');
-const path = require('path');
 const assert = require('assert');
-const iosStimme = require('./ios-stimme.js');
+const { starteTestbett, anmelden } = require('./testbett.js');
 
-const WURZEL = path.resolve(__dirname, '..');
-const TYP = { '.html': 'text/html', '.js': 'text/javascript', '.woff2': 'font/woff2' };
-const dienst = http.createServer((anf, ant) => {
-  const datei = path.join(WURZEL, anf.url === '/' ? 'index.html' : anf.url.split('?')[0]);
-  fs.readFile(datei, (f, inhalt) => {
-    ant.writeHead(f ? 404 : 200, { 'Content-Type': TYP[path.extname(datei)] || 'text/plain' });
-    ant.end(inhalt);
-  });
-});
 const BILDER = process.env.BILDER;
 const FORMAT = { viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
-const SPEICHER = 'rechentrainer-v1';
 
 const loese = (t) => {
   const [x, op, y] = t.replace(' =', '').split(' ');
@@ -28,10 +14,13 @@ const loeseGesagt = (t) => {
   const r = { plus: +x + +y, mal: x * y, minus: x - y, geteilt: x / (t.includes('geteilt') ? t.split(' ')[3] : y) }[wort];
   return String(r);
 };
-const stand = (seite) => seite.evaluate((k) => JSON.parse(localStorage.getItem(k)), SPEICHER);
+const stand = (seite) => seite.evaluate(() => JSON.parse(localStorage.getItem('rechentrainer-v2-nutzer-1')));
+let backend = null;
 const leeren = async (seite) => {
-  await seite.evaluate((k) => localStorage.removeItem(k), SPEICHER);
+  backend.zeilen.length = 0;
+  await seite.evaluate(() => localStorage.removeItem('rechentrainer-v2-nutzer-1'));
   await seite.reload();
+  await seite.waitForSelector('#los');
 };
 const tippe = async (seite, wert) => { for (const z of wert) await seite.tap(`[data-z="${z}"]`); };
 const bild = async (seite, name) => { if (BILDER) await seite.screenshot({ path: `${BILDER}/${name}.png` }); };
@@ -84,7 +73,7 @@ async function erstHoeren(seite) {
   await seite.waitForSelector('#blitz');
   await seite.waitForTimeout(260);
   await bild(seite, 'blitz');
-  assert.strictEqual((await stand(seite)).versuche.at(-1).ergebnis, 'schnell');
+  assert.strictEqual((await stand(seite)).offen.at(-1).ergebnis, 'schnell');
 }
 
 async function antwortWaehrendAnsage(seite) {
@@ -92,13 +81,13 @@ async function antwortWaehrendAnsage(seite) {
   const gesagt = await seite.evaluate(() => window.gesagtJetzt);
   await tippe(seite, loeseGesagt(gesagt));
   await seite.waitForSelector('#blitz');
-  const v = (await stand(seite)).versuche.at(-1);
+  const v = (await stand(seite)).offen.at(-1);
   assert.deepStrictEqual([v.ergebnis, v.ms], ['schnell', 0], JSON.stringify(v));
 }
 
 const andere = (soll) => (soll === '9' ? '8' : '9'.repeat(soll.length));
 const anzahlIst = (seite, n) => seite.waitForFunction(
-  ([k, m]) => JSON.parse(localStorage.getItem(k)).versuche.length === m, [SPEICHER, n],
+  (m) => JSON.parse(localStorage.getItem('rechentrainer-v2-nutzer-1')).offen.length === m, n,
 );
 
 async function bestaetigung(seite, soll, gesamt) {
@@ -114,14 +103,14 @@ async function bestaetigung(seite, soll, gesamt) {
   await seite.waitForTimeout(100);
   assert.strictEqual(await seite.textContent('#gleichung .feld'), '', 'Falsch Abgetipptes bleibt stehen');
   assert.strictEqual(await seite.locator('#loesung').count(), 1, 'Falsch Abgetipptes zählte als Bestätigung');
-  assert.strictEqual((await stand(seite)).versuche.length, gesamt, 'Abtippen wurde als Versuch gewertet');
+  assert.strictEqual((await stand(seite)).offen.length, gesamt, 'Abtippen wurde als Versuch gewertet');
   await tippe(seite, soll);
   await seite.waitForSelector('#loesung', { state: 'detached', timeout: 3000 });
 }
 
 async function falschUndWiederkehr(seite) {
   const t = await sichtbar(seite);
-  const start = (await stand(seite)).versuche.length;
+  const start = (await stand(seite)).offen.length;
   await tippe(seite, andere(loese(t)));
   await anzahlIst(seite, start + 1);
   await bestaetigung(seite, loese(t), start + 1);
@@ -129,7 +118,7 @@ async function falschUndWiederkehr(seite) {
   await anzahlIst(seite, start + 3);
   await tippe(seite, loese(await sichtbar(seite)));
   await anzahlIst(seite, start + 4);
-  const v = (await stand(seite)).versuche;
+  const v = (await stand(seite)).offen;
   assert.strictEqual(v[start + 3].karte, v[start].karte, 'Aufgabe kam nicht nach zwei anderen wieder');
 }
 
@@ -141,7 +130,7 @@ async function zeitAbgelaufen(seite) {
   await seite.waitForSelector('#loesung', { timeout: 7000 });
   const dauer = Date.now() - seit;
   assert.ok(dauer > 4700 && dauer < 5800, `Lösung kam nach ${dauer} ms`);
-  const v = (await stand(seite)).versuche.at(-1);
+  const v = (await stand(seite)).offen.at(-1);
   assert.deepStrictEqual([v.ergebnis, v.antwort, v.stufe_nach], ['langsam', null, 1], JSON.stringify(v));
   await seite.waitForTimeout(1700);
   await bestaetigung(seite, loese(t), 1);
@@ -157,23 +146,20 @@ async function ganzeRunde(seite) {
     await tippe(seite, loese(t));
   }
   await seite.waitForSelector('#ende:not([hidden])');
+  await seite.waitForFunction(() => document.querySelectorAll('#tafelPlus i.s2').length > 0);
   await bild(seite, 'ende');
-  const s = await stand(seite);
-  assert.strictEqual(s.versuche.length, 20);
-  assert.ok(s.versuche.every((v) => /^[pmxd]_\d{1,2}_\d{1,2}$/.test(v.karte)));
-  await seite.reload();
-  assert.strictEqual(Object.keys((await stand(seite)).staende).length, Object.keys(s.staende).length, 'Fortschritt verloren');
+  const ende = await seite.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+  assert.ok(ende <= 0, `Endbild rollt um ${ende} px`);
+  await seite.waitForFunction(() => JSON.parse(localStorage.getItem('rechentrainer-v2-nutzer-1')).offen.length === 0);
+  assert.strictEqual(backend.zeilen.length, 20);
+  assert.ok(backend.zeilen.every((v) => /^[pmxd]_\d{1,2}_\d{1,2}$/.test(v.karte)));
 }
 
 (async () => {
-  await new Promise((r) => dienst.listen(0, '127.0.0.1', r));
-  const browser = await chromium.launch();
-  const seite = await (await browser.newContext(FORMAT)).newPage();
-  const fehler = [];
-  seite.on('pageerror', (e) => fehler.push(e.message));
-  seite.on('console', (m) => m.type() === 'error' && fehler.push(m.text()));
-  await seite.addInitScript(iosStimme);
-  await seite.goto(`http://127.0.0.1:${dienst.address().port}/`);
+  const bett = await starteTestbett(FORMAT);
+  backend = bett.backend;
+  const { seite, fehler } = bett;
+  await anmelden(seite);
   await seite.evaluate(() => document.fonts.ready);
   await bild(seite, 'start');
 
@@ -181,8 +167,7 @@ async function ganzeRunde(seite) {
     await fn(seite);
     console.log(`ok  ${name}`);
   }
-  await browser.close();
-  dienst.close();
+  await bett.ende();
   assert.deepStrictEqual(fehler, [], `JS-Fehler: ${fehler}`);
   console.log('BESTANDEN');
 })().catch((e) => { console.error('DURCHGEFALLEN:', e.message); process.exit(1); });

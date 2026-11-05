@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f7fafd">
+<title>Wochenbericht</title>
+<link rel="icon" href="symbole/symbol-192.png">
+<style>
+@font-face { font-family: Andika; src: url(schrift/andika-400.woff2) format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Andika; src: url(schrift/andika-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+:root { color-scheme: light; --papier: #f7fafd; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --leise: #566170; --warn: #8a5200; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--papier); color: var(--blei); font: 17px/1.45 Andika, system-ui, sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { margin: 0; font-size: 28px; line-height: 1.2; color: var(--tinte); }
+h2 { margin: 32px 0 8px; font-size: 19px; color: var(--tinte); }
+p { margin: 0 0 12px; }
+.leise { color: var(--leise); font-size: 15px; }
+.zahlen { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0 0; }
+.zahlen div { border-top: 2px solid var(--tinte); padding-top: 6px; }
+.zahlen dd { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.zahlen dt { color: var(--leise); font-size: 15px; }
+#empfehlung { margin-top: 20px; color: var(--warn); font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 15px; font-weight: 400; color: var(--leise); }
+th, td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--karo); }
+th:not(:first-child), td:not(:first-child) { text-align: right; padding-right: 0; }
+label { display: block; margin-bottom: 12px; font-weight: 700; }
+select, input { display: block; width: 100%; height: 46px; margin-top: 4px; padding: 0 10px; border: 2px solid var(--tinte); border-radius: 6px; background: #fff; color: var(--blei); font: inherit; }
+button { display: block; width: 100%; min-height: 50px; margin-top: 12px; border: 0; border-radius: 6px; background: var(--tinte); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+button.neben { background: #fff; color: var(--tinte); border: 2px solid var(--tinte); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--tinte); outline-offset: 2px; }
+#meldung { min-height: 24px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <section id="anmeldung" hidden>
+    <h1>Wochenbericht</h1>
+    <p class="leise">Mit dem Konto anmelden, dessen Bericht du sehen möchtest.</p>
+    <form id="anmeldeform">
+      <label>E-Mail<input id="email" type="email" autocomplete="username" required></label>
+      <label>Passwort<input id="passwort" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Anmelden</button>
+      <p id="anmeldehinweis" role="status"></p>
+    </form>
+  </section>
+
+  <section id="bericht" hidden>
+    <h1>Wochenbericht</h1>
+    <p class="leise" id="zeitraum"></p>
+    <p id="fehler" role="alert" hidden>Die Daten sind gerade nicht erreichbar. Bitte später noch einmal öffnen.</p>
+    <div id="inhalt" hidden>
+      <dl class="zahlen">
+        <div><dd id="tage"></dd><dt>Übungstage von 7</dt></div>
+        <div><dd id="aufgaben"></dd><dt>Aufgaben gerechnet</dt></div>
+        <div><dd id="quote"></dd><dt>beim ersten Versuch gewusst</dt></div>
+        <div><dd id="dauer"></dd><dt>Antwortzeit im Mittel, gewusste Aufgaben</dt></div>
+      </dl>
+      <p id="empfehlung" hidden></p>
+
+      <h2>Verlauf</h2>
+      <table><thead><tr><th>Woche bis</th><th>Aufgaben</th><th>Gewusst</th></tr></thead><tbody id="verlauf"></tbody></table>
+
+      <h2>Aufgaben</h2>
+      <p class="leise">Sicher heißt: Die Aufgabe kommt erst wieder in 8 Tagen oder später.</p>
+      <table><thead><tr><th>Art</th><th>Gesehen</th><th>Sicher</th><th>Gesamt</th></tr></thead><tbody id="karten"></tbody></table>
+
+      <h2>Wackelkandidaten, letzte 14 Tage</h2>
+      <p class="leise" id="keineWackler" hidden>Keine bisher.</p>
+      <table id="wackelTabelle"><thead><tr><th>Aufgabe</th><th>Nicht gewusst</th></tr></thead><tbody id="wackel"></tbody></table>
+
+      <h2>Einstellungen</h2>
+      <form id="einstellungen">
+        <label>Zeit nach dem Erscheinen der Aufgabe<select id="zeitlimit_ms"></select></label>
+        <label>Aufgaben pro Runde<select id="aufgaben_pro_runde"></select></label>
+        <label>Unbekannte neue Aufgaben pro Tag<select id="neue_pro_tag"></select></label>
+        <button type="submit">Einstellungen speichern</button>
+        <p id="meldung" class="leise" role="status"></p>
+      </form>
+    </div>
+    <button class="neben" id="abmelden">Abmelden</button>
+  </section>
+</main>
+
+<script src="kern.js"></script>
+<script src="netz.js"></script>
+<script>
+'use strict';
+const GRUNDWERTE = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
+const OPTIONEN = {
+  zeitlimit_ms: [3, 4, 5, 6, 7, 8, 10].map((s) => [s * 1000, `${s} Sekunden`]),
+  aufgaben_pro_runde: [10, 15, 20, 25, 30].map((n) => [n, String(n)]),
+  neue_pro_tag: [2, 3, 4, 5, 6, 8].map((n) => [n, String(n)]),
+};
+const ARTEN = { plus: 'Plus', minus: 'Minus', mal: 'Mal', durch: 'Durch' };
+const $ = (id) => document.getElementById(id);
+const zeige = (id) => document.querySelectorAll('section').forEach((s) => { s.hidden = s.id !== id; });
+const prozent = (q) => (q === null ? '–' : `${Math.round(q * 100)} %`);
+const sekunden = (ms) => (ms === null ? '–' : `${(ms / 1000).toFixed(1).replace('.', ',')} s`);
+const kurz = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.`;
+
+function zeile(...zellen) {
+  const tr = document.createElement('tr');
+  zellen.forEach((z) => { const td = document.createElement('td'); td.textContent = z; tr.append(td); });
+  return tr;
+}
+
+function fuelleEinstellungen(werte) {
+  Object.entries(OPTIONEN).forEach(([name, liste]) => {
+    const aktuell = werte[name];
+    const alle = liste.some(([wert]) => wert === aktuell) ? liste : [[aktuell, String(aktuell)], ...liste];
+    $(name).replaceChildren(...alle.map(([wert, text]) => new Option(text, wert)));
+    $(name).value = String(aktuell);
+  });
+}
+
+async function ladeBericht() {
+  zeige('bericht');
+  const datum = Kern.heute();
+  const seit = `${Kern.addiereTage(datum, -28)}T00:00:00Z`;
+  try {
+    const [versuche, staende, einstellung] = await Promise.all([Netz.holeVersuche(seit), Netz.holeStaende(), Netz.holeEinstellung()]);
+    const a = Kern.auswertung(versuche, staende, datum);
+    $('zeitraum').textContent = `${kurz(a.woche.von)} bis ${kurz(a.woche.bis)}`;
+    $('tage').textContent = a.woche.tage;
+    $('aufgaben').textContent = a.woche.aufgaben;
+    $('quote').textContent = prozent(a.woche.quote);
+    $('dauer').textContent = sekunden(a.woche.medianMs);
+    $('empfehlung').hidden = !a.zuKnapp;
+    $('empfehlung').textContent = 'Weniger als die Hälfte wurde beim ersten Versuch gewusst. Vorschlag: Zeit vorübergehend auf 7 Sekunden stellen.';
+    $('verlauf').replaceChildren(...a.verlauf.map((w) => zeile(kurz(w.bis), w.aufgaben, prozent(w.quote))));
+    $('karten').replaceChildren(...a.karten.map((k) => zeile(ARTEN[k.art], k.gesehen, k.sicher, k.gesamt)));
+    $('wackel').replaceChildren(...a.wackel.map((w) => zeile(w.text, `${w.anzahl}-mal`)));
+    $('wackelTabelle').hidden = !a.wackel.length;
+    $('keineWackler').hidden = Boolean(a.wackel.length);
+    fuelleEinstellungen(einstellung || GRUNDWERTE);
+    $('inhalt').hidden = false;
+    $('fehler').hidden = true;
+  } catch {
+    if (!Netz.angemeldet()) { zeige('anmeldung'); return; }
+    $('fehler').hidden = false;
+    $('inhalt').hidden = true;
+  }
+}
+
+$('anmeldeform').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const hinweis = $('anmeldehinweis');
+  hinweis.textContent = 'Einen Moment …';
+  try {
+    if (!(await Netz.anmelden($('email').value.trim(), $('passwort').value))) {
+      hinweis.textContent = 'E-Mail oder Passwort stimmt nicht.';
+      return;
+    }
+  } catch {
+    hinweis.textContent = 'Keine Verbindung. Bitte prüfen und noch einmal versuchen.';
+    return;
+  }
+  $('passwort').value = '';
+  hinweis.textContent = '';
+  ladeBericht();
+});
+
+$('einstellungen').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const werte = Object.fromEntries(Object.keys(OPTIONEN).map((n) => [n, Number($(n).value)]));
+  try {
+    await Netz.speichereEinstellung(werte);
+    $('meldung').textContent = 'Gespeichert. Gilt ab der nächsten Runde.';
+  } catch {
+    $('meldung').textContent = 'Nicht gespeichert: keine Verbindung.';
+  }
+});
+
+$('abmelden').addEventListener('click', () => { Netz.abmelden(); zeige('anmeldung'); });
+
+if (Netz.angemeldet()) ladeBericht();
+else zeige('anmeldung');
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@
   const MIN_ABSTAND = 2;
   const STUFE_BEI_BEKANNT = 3;
   const STUFE_FUER_UMKEHR = 2;
+  const STUFE_SICHER = 4;
 
   function rangPlus(a, b) {
     if (a === b) return 0;
@@ -170,9 +171,50 @@
   const istMehrDa = (staende, datum, neuVerbraucht, einstellung) => faelligeKarten(staende, datum).length > 0
     || (neuVerbraucht < einstellung.neue_pro_tag && Boolean(naechsteNeue(staende)));
 
+  const median = (w) => {
+    if (!w.length) return null;
+    const s = [...w].sort((a, b) => a - b), m = s.length >> 1;
+    return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+  };
+
+  // Zählt nur den ersten Versuch je Karte und Runde: Die Wiederholung kurz nach der Lösung sagt nichts über das Können.
+  function auswertung(versuche, staende, datum) {
+    const gesehen = new Set();
+    const zeilen = [...versuche].sort((a, b) => a.beantwortet_am.localeCompare(b.beantwortet_am)).map((v) => {
+      const schluessel = `${v.sitzung}|${v.karte}`;
+      const erster = !gesehen.has(schluessel);
+      gesehen.add(schluessel);
+      return { ...v, erster, tag: heute(new Date(v.beantwortet_am)) };
+    });
+    const woche = (i) => {
+      const bis = addiereTage(datum, -7 * i), von = addiereTage(bis, -6);
+      const teil = zeilen.filter((v) => v.tag >= von && v.tag <= bis);
+      const erste = teil.filter((v) => v.erster);
+      const gewusst = erste.filter((v) => v.ergebnis === 'schnell');
+      return {
+        von, bis, tage: new Set(teil.map((v) => v.tag)).size, aufgaben: teil.length,
+        quote: erste.length ? gewusst.length / erste.length : null, medianMs: median(gewusst.map((v) => v.ms)),
+      };
+    };
+    const karten = ['plus', 'minus', 'mal', 'durch'].map((art) => {
+      const liste = KARTEN.filter((k) => k.art === art);
+      const mitStand = liste.filter((k) => staende[k.id]);
+      return { art, gesamt: liste.length, gesehen: mitStand.length, sicher: mitStand.filter((k) => staende[k.id].stufe >= STUFE_SICHER).length };
+    });
+    const grenze = addiereTage(datum, -13);
+    const fehler = new Map();
+    zeilen.filter((v) => v.erster && v.tag >= grenze && v.ergebnis !== 'schnell')
+      .forEach((v) => fehler.set(v.karte, (fehler.get(v.karte) || 0) + 1));
+    const wackel = [...fehler].sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([id, anzahl]) => ({ text: aufgabe(PRO_ID.get(id), () => 1).zeige, anzahl }));
+    const verlauf = [0, 1, 2, 3].map(woche);
+    const jetzt = verlauf[0];
+    return { woche: jetzt, verlauf, karten, wackel, zuKnapp: jetzt.tage >= 5 && jetzt.quote !== null && jetzt.quote < 0.5 };
+  }
+
   const Kern = {
-    KARTEN, PRO_ID, aufgabe, rechenweg, bewerte, addiereTage, heute, naechsterStand,
-    faelligeKarten, naechsteNeue, starteRunde, naechste, verbuche, erwartet, istMehrDa,
+    ZAHLEN, KARTEN, PRO_ID, aufgabe, rechenweg, bewerte, addiereTage, heute, naechsterStand,
+    faelligeKarten, naechsteNeue, starteRunde, naechste, verbuche, erwartet, istMehrDa, auswertung,
   };
   if (typeof module !== 'undefined') module.exports = Kern;
   else global.Kern = Kern;

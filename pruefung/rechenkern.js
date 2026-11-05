@@ -104,6 +104,24 @@ const pruefungen = {
     const r = K.starteRunde(st, EIN, TAG, 0, zufall);
     assert.strictEqual(r.plan.length, 20);
   },
+  'Auswertung zählt nur erste Versuche': () => {
+    const am = (tag, std) => `${tag}T${std}:00:00+01:00`;
+    const v = (sitzung, karte, ergebnis, ms, tag, std) => ({ sitzung, karte, ergebnis, ms, beantwortet_am: am(tag, std) });
+    const versuche = [
+      v('a', 'p_7_8', 'falsch', 5000, '2026-11-02', '10'), v('a', 'p_7_8', 'schnell', 900, '2026-11-02', '11'),
+      v('a', 'x_6_7', 'schnell', 1000, '2026-11-02', '12'), v('b', 'p_7_8', 'langsam', 5000, '2026-11-06', '10'),
+      v('b', 'x_6_7', 'schnell', 3000, '2026-11-06', '11'), v('c', 'x_3_4', 'schnell', 500, '2026-10-20', '10'),
+    ];
+    const a = K.auswertung(versuche, { p_7_8: { stufe: 1 }, x_6_7: { stufe: 4 } }, TAG);
+    assert.deepStrictEqual([a.woche.tage, a.woche.aufgaben, a.woche.quote, a.woche.medianMs], [2, 5, 0.5, 2000]);
+    assert.strictEqual(a.verlauf[2].quote, 1);
+    assert.deepStrictEqual(a.karten.find((k) => k.art === 'mal'), { art: 'mal', gesamt: 36, gesehen: 1, sicher: 1 });
+    assert.deepStrictEqual(a.wackel, [{ text: '7 + 8', anzahl: 2 }]);
+    assert.strictEqual(a.zuKnapp, false);
+    const tage = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06'];
+    const knapp = K.auswertung(tage.map((t, i) => v(`s${i}`, 'p_7_8', 'langsam', 5000, t, '10')), {}, TAG);
+    assert.strictEqual(knapp.zuKnapp, true);
+  },
   'Tagespensum nach 120 simulierten Tagen': () => {
     const st = {};
     let datum = TAG, spitze = 0;
