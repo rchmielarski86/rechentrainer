@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Technik-Test</title>
+<style>
+:root {
+  color-scheme: light;
+  --grund: #faf7f2; --karte: #fff; --text: #22272e; --leise: #5f6873; --linie: #e4ded3;
+  --akzent: #2f6f5e; --gut: #2f7d4f; --warn: #a86400; --schlecht: #b3362b;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--grund); color: var(--text); font: 17px/1.45 system-ui, sans-serif; }
+main { max-width: 460px; margin: 0 auto; padding: 24px 16px 40px; }
+h1 { font-size: 26px; line-height: 1.2; margin: 0 0 12px; }
+p { margin: 0 0 16px; }
+.leise { color: var(--leise); font-size: 15px; }
+button { font: inherit; border: 0; border-radius: 12px; cursor: pointer; touch-action: manipulation; }
+.haupt, .neben { display: block; width: 100%; min-height: 56px; padding: 12px 16px; margin-top: 12px; font-weight: 600; }
+.haupt { background: var(--akzent); color: #fff; }
+.neben { background: var(--karte); color: var(--text); border: 1px solid var(--linie); }
+#aufgabe { font-size: 52px; font-weight: 700; text-align: center; margin: 12px 0 0; font-variant-numeric: tabular-nums; }
+#eingabe { min-height: 46px; font-size: 34px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+#rueck { min-height: 28px; text-align: center; font-weight: 600; margin-bottom: 12px; }
+#pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; user-select: none; -webkit-user-select: none; }
+#pad button { min-height: 68px; font-size: 28px; font-weight: 600; background: var(--karte); color: var(--text); border: 1px solid var(--linie); }
+#pad button:active { background: var(--linie); }
+#pad button:last-child { grid-column: 2; }
+#befunde { list-style: none; margin: 0 0 16px; padding: 0; }
+#befunde li { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linie); }
+#befunde b { flex: 0 0 22px; text-align: center; }
+.gut b { color: var(--gut); } .warn b { color: var(--warn); } .schlecht b { color: var(--schlecht); }
+textarea { width: 100%; height: 170px; padding: 10px; font: 13px/1.4 ui-monospace, monospace; color: var(--text); background: var(--karte); border: 1px solid var(--linie); border-radius: 8px; }
+#meldung { min-height: 24px; margin-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <section id="start">
+    <h1>Technik-Test</h1>
+    <p>Prüft auf diesem Handy die Sprachausgabe und die Zeitmessung. Das dauert etwa zwei Minuten.</p>
+    <p class="leise">Bitte den Medien-Ton laut stellen. Es werden keine Daten gespeichert oder verschickt.</p>
+    <button class="haupt" id="los">Test starten</button>
+  </section>
+
+  <section id="lauf" hidden>
+    <h1>Hör kurz zu</h1>
+    <p id="fortschritt" aria-live="polite"></p>
+    <p class="leise">Das Handy liest jetzt von selbst acht Aufgaben vor.</p>
+  </section>
+
+  <section id="runde" hidden>
+    <p class="leise" id="zaehler"></p>
+    <div id="aufgabe" aria-live="polite"></div>
+    <div id="eingabe"></div>
+    <div id="rueck"></div>
+    <div id="pad"></div>
+  </section>
+
+  <section id="ergebnis" hidden>
+    <h1>Ergebnis</h1>
+    <ul id="befunde"></ul>
+    <button class="haupt" id="teilen">Ergebnis teilen</button>
+    <button class="neben" id="nochmal">Stimme erneut prüfen, z. B. im Flugmodus</button>
+    <button class="neben" id="wieder">Rechenrunde wiederholen</button>
+    <div id="meldung" class="leise" aria-live="polite"></div>
+    <textarea id="text" readonly aria-label="Ergebnis als Text"></textarea>
+  </section>
+</main>
+
+<script>
+'use strict';
+const ANSAGEN = ['7 plus 8', '6 mal 7', '15 minus 8', '42 geteilt durch 6', '9 plus 9', '8 mal 8', '13 minus 6', '63 geteilt durch 7'];
+const AUFGABEN = [
+  { zeige: '7 + 8', sprich: '7 plus 8', loesung: '15' },
+  { zeige: '6 · 7', sprich: '6 mal 7', loesung: '42' },
+  { zeige: '15 − 8', sprich: '15 minus 8', loesung: '7' },
+  { zeige: '42 : 6', sprich: '42 geteilt durch 6', loesung: '7' },
+  { zeige: '9 + 6', sprich: '9 plus 6', loesung: '15' },
+];
+const WACHE_MS = 6000;
+
+const $ = (id) => document.getElementById(id);
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+const median = (w) => {
+  if (!w.length) return null;
+  const s = [...w].sort((a, b) => a - b), m = s.length >> 1;
+  return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+};
+const ms = (w) => (w === null ? '–' : `${w} ms`);
+const zeige = (id) => document.querySelectorAll('section').forEach((s) => { s.hidden = s.id !== id; });
+const istDeutsch = (v) => /^de([-_]|$)/i.test(v.lang);
+
+const laeufe = [];
+let rundenWerte = [];
+let stimme = null;
+let tippZiel = null;
+const gehalten = []; // Chrome verliert sonst Ereignisse freigegebener Ansagen.
+
+function stimmenLaden() {
+  return new Promise((fertig) => {
+    const jetzt = speechSynthesis.getVoices();
+    if (jetzt.length) return fertig(jetzt);
+    const ende = () => fertig(speechSynthesis.getVoices());
+    speechSynthesis.addEventListener('voiceschanged', ende, { once: true });
+    setTimeout(ende, 3000);
+  });
+}
+
+function waehle(alle) {
+  const de = alle.filter(istDeutsch);
+  return de.find((v) => v.localService && /^de[-_]DE/i.test(v.lang)) || de.find((v) => v.localService) || de[0] || null;
+}
+
+function sprich(text) {
+  return new Promise((fertig) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = stimme ? stimme.lang.replace('_', '-') : 'de-DE';
+    if (stimme) u.voice = stimme;
+    gehalten.push(u);
+    const t0 = performance.now();
+    let tStart = null, erledigt = false;
+    const schluss = (ende, fehler) => {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(wache);
+      fertig({
+        start: tStart === null ? null : Math.round(tStart - t0),
+        dauer: Math.round(performance.now() - (tStart ?? t0)),
+        ende, fehler,
+      });
+    };
+    const wache = setTimeout(() => { schluss('fehlt'); speechSynthesis.cancel(); }, WACHE_MS);
+    u.onstart = () => { tStart = performance.now(); };
+    u.onend = () => schluss('ok');
+    u.onerror = (e) => schluss('fehler', e.error);
+    speechSynthesis.speak(u);
+  });
+}
+
+async function pruefeStimme() {
+  zeige('lauf');
+  const netz = navigator.onLine ? 'online' : 'offline';
+  if (!('speechSynthesis' in window)) { laeufe.push({ netz, keineApi: true }); return false; }
+  speechSynthesis.cancel();
+  const alle = await stimmenLaden();
+  stimme = waehle(alle);
+  const lauf = { netz, gesamt: alle.length, deutsch: alle.filter(istDeutsch), stimme, ansagen: [] };
+  laeufe.push(lauf);
+  for (let i = 0; i < ANSAGEN.length; i++) {
+    $('fortschritt').textContent = `Ansage ${i + 1} von ${ANSAGEN.length}`;
+    lauf.ansagen.push(await sprich(ANSAGEN[i]));
+    await warte(400);
+  }
+  return true;
+}
+
+function tippen(stellen) {
+  return new Promise((fertig) => { tippZiel = { stellen, wert: '', erste: null, fertig }; });
+}
+
+function ziffer(z, e) {
+  e.preventDefault();
+  const t = tippZiel;
+  if (!t) return;
+  if (t.erste === null) { t.erste = e.timeStamp; t.verzug = performance.now() - e.timeStamp; }
+  t.wert += z;
+  $('eingabe').textContent = t.wert;
+  if (t.wert.length < t.stellen) return;
+  tippZiel = null;
+  t.fertig({ wert: t.wert, erste: t.erste, letzte: e.timeStamp, verzug: t.verzug });
+}
+
+async function stelleAufgabe(a) {
+  $('aufgabe').textContent = a.zeige;
+  $('eingabe').textContent = '';
+  $('rueck').textContent = '';
+  let ansageEnde = null;
+  const ansage = sprich(a.sprich).then((r) => { ansageEnde = performance.now(); return r; });
+  const t = await tippen(a.loesung.length);
+  if (ansageEnde === null) speechSynthesis.cancel();
+  const r = await ansage;
+  const vorEnde = t.erste < ansageEnde;
+  rundenWerte.push({
+    ms: vorEnde ? 0 : Math.round(t.erste - ansageEnde),
+    tippMs: Math.round(t.letzte - t.erste),
+    verzug: Math.round(t.verzug),
+    richtig: t.wert === a.loesung, vorEnde, ende: r.ende,
+  });
+  $('rueck').textContent = t.wert === a.loesung ? '✓' : `${a.zeige} = ${a.loesung}`;
+  await warte(900);
+}
+
+async function rechenrunde() {
+  rundenWerte = [];
+  zeige('runde');
+  for (let i = 0; i < AUFGABEN.length; i++) {
+    $('zaehler').textContent = `Aufgabe ${i + 1} von ${AUFGABEN.length}`;
+    await stelleAufgabe(AUFGABEN[i]);
+  }
+}
+
+function befundeLauf(l, liste) {
+  const wo = `(${l.netz})`;
+  if (l.keineApi) return liste.push(['schlecht', `Keine Sprachausgabe in diesem Browser ${wo}. Bitte Chrome verwenden.`]);
+  if (l.deutsch.length) {
+    liste.push(['gut', `Deutsche Stimme ${wo}: ${l.stimme.name}${l.stimme.localService ? ', auf dem Gerät' : ', über das Netz'}`]);
+  } else {
+    liste.push(['schlecht', `Keine deutsche Stimme ${wo}. In den Android-Einstellungen unter Sprachausgabe Deutsch nachladen.`]);
+  }
+  const n = l.ansagen.length, ok = l.ansagen.filter((a) => a.ende === 'ok').length;
+  liste.push([ok === n ? 'gut' : ok ? 'warn' : 'schlecht', `Ende-Signal ${wo}: ${ok} von ${n} Ansagen`]);
+}
+
+function befunde() {
+  const liste = [];
+  laeufe.forEach((l) => befundeLauf(l, liste));
+  if (!laeufe.some((l) => l.netz === 'offline')) {
+    liste.push(['warn', 'Offline noch nicht geprüft: Flugmodus einschalten und unten die Stimme erneut prüfen.']);
+  }
+  if (rundenWerte.length) {
+    const n = rundenWerte.length, ziel = AUFGABEN.length;
+    const ohneEnde = rundenWerte.filter((r) => !r.vorEnde && r.ende !== 'ok').length;
+    const rest = ohneEnde ? `, ${ohneEnde} davon ungenau (kein Ende-Signal)` : '';
+    liste.push([n === ziel && !ohneEnde ? 'gut' : 'warn', `Zeitmessung: ${n} von ${ziel} Antworten erfasst${rest}`]);
+  }
+  return liste;
+}
+
+function berichtLauf(l) {
+  if (l.keineApi) return [`Lauf ${l.netz}: keine Sprachausgabe`];
+  const ok = l.ansagen.filter((a) => a.ende === 'ok');
+  const fehler = [...new Set(l.ansagen.map((a) => a.fehler).filter(Boolean))].join(', ') || 'keine';
+  const startW = l.ansagen.map((a) => a.start).filter((s) => s !== null);
+  return [
+    `Lauf ${l.netz}: ${l.gesamt} Stimmen, ${l.deutsch.length} deutsch, ${l.deutsch.filter((v) => v.localService).length} lokal`,
+    `  genutzt: ${l.stimme ? `${l.stimme.name} (${l.stimme.lang})` : 'keine'}`,
+    `  Ende-Signal ${ok.length}/${l.ansagen.length}, Fehler: ${fehler}`,
+    `  Startverzug Median ${ms(median(startW))}, max ${ms(startW.length ? Math.max(...startW) : null)}`,
+    `  Sprechdauer Median ${ms(median(ok.map((a) => a.dauer)))}`,
+  ];
+}
+
+function bericht() {
+  const z = ['Rechentrainer Technik-Test', navigator.userAgent];
+  laeufe.forEach((l) => z.push(...berichtLauf(l)));
+  if (rundenWerte.length) {
+    const w = rundenWerte, regulaer = w.filter((r) => !r.vorEnde);
+    z.push(
+      `Rechenrunde: ${w.length} Antworten, ${w.filter((r) => r.richtig).length} richtig`,
+      `  Reaktion Median ${ms(median(regulaer.map((r) => r.ms)))}, vor Ansage-Ende ${w.length - regulaer.length}`,
+      `  Tippdauer Median ${ms(median(w.map((r) => r.tippMs)))}, Eingabeverzug Median ${ms(median(w.map((r) => r.verzug)))}`,
+      `  Ende-Signal ${regulaer.filter((r) => r.ende === 'ok').length}/${regulaer.length}`,
+    );
+  }
+  return z.join('\n');
+}
+
+function zeigeErgebnis() {
+  const zeichen = { gut: '✓', warn: '!', schlecht: '✗' };
+  $('befunde').replaceChildren(...befunde().map(([stufe, text]) => {
+    const li = document.createElement('li');
+    const b = document.createElement('b');
+    const s = document.createElement('span');
+    li.className = stufe;
+    b.textContent = zeichen[stufe];
+    s.textContent = text;
+    li.append(b, s);
+    return li;
+  }));
+  $('text').value = bericht();
+  $('meldung').textContent = '';
+  zeige('ergebnis');
+}
+
+async function teilen() {
+  const text = $('text').value;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Technik-Test', text }); return; }
+    await navigator.clipboard.writeText(text);
+    $('meldung').textContent = 'Kopiert.';
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    $('text').select();
+    $('meldung').textContent = 'Bitte den markierten Text kopieren.';
+  }
+}
+
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].forEach((z) => {
+  const b = document.createElement('button');
+  b.textContent = z;
+  b.dataset.z = z;
+  b.addEventListener('pointerdown', (e) => ziffer(String(z), e));
+  $('pad').append(b);
+});
+
+$('los').addEventListener('click', async () => {
+  if (await pruefeStimme()) await rechenrunde();
+  zeigeErgebnis();
+});
+$('nochmal').addEventListener('click', async () => { await pruefeStimme(); zeigeErgebnis(); });
+$('wieder').addEventListener('click', async () => { await rechenrunde(); zeigeErgebnis(); });
+$('teilen').addEventListener('click', teilen);
+</script>
+</body>
+</html>
