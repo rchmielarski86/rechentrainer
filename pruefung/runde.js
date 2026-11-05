@@ -17,130 +17,161 @@ const dienst = http.createServer((anf, ant) => {
 });
 const BILDER = process.env.BILDER;
 const FORMAT = { viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const SPEICHER = 'rechentrainer-v1';
 
-const liesAufgabe = (seite) => seite.getAttribute('#gleichung', 'aria-label');
 const loese = (t) => {
   const [x, op, y] = t.replace(' =', '').split(' ');
   return String({ '+': +x + +y, '·': x * y, '−': x - y, ':': x / y }[op]);
 };
-const wartePaar = (seite, alt) => seite.waitForFunction((a) => {
-  const g = document.getElementById('gleichung');
-  return g.getAttribute('aria-label') !== a && !document.querySelector('#rueck svg, #weg') && !document.getElementById('runde').hidden;
-}, alt);
+const loeseGesagt = (t) => {
+  const [x, wort, , y] = t.includes('geteilt') ? t.split(' ') : [...t.split(' ').slice(0, 2), '', t.split(' ')[2]];
+  const r = { plus: +x + +y, mal: x * y, minus: x - y, geteilt: x / (t.includes('geteilt') ? t.split(' ')[3] : y) }[wort];
+  return String(r);
+};
+const stand = (seite) => seite.evaluate((k) => JSON.parse(localStorage.getItem(k)), SPEICHER);
+const leeren = async (seite) => {
+  await seite.evaluate((k) => localStorage.removeItem(k), SPEICHER);
+  await seite.reload();
+};
 const tippe = async (seite, wert) => { for (const z of wert) await seite.tap(`[data-z="${z}"]`); };
-const passt = (seite) => seite.evaluate(() => {
-  const m = document.querySelector('main'), r = document.getElementById('pad');
-  return { hoch: document.documentElement.scrollHeight - innerHeight, breit: document.documentElement.scrollWidth - innerWidth, padUnten: r.hidden ? 0 : r.getBoundingClientRect().bottom - innerHeight, mainB: m.clientWidth };
-});
+const bild = async (seite, name) => { if (BILDER) await seite.screenshot({ path: `${BILDER}/${name}.png` }); };
 
-(async () => {
-  await new Promise((r) => dienst.listen(0, '127.0.0.1', r));
-  const SEITE = `http://127.0.0.1:${dienst.address().port}/`;
-  const browser = await chromium.launch();
-  const kontext = await browser.newContext(FORMAT);
-  const seite = await kontext.newPage();
-  const fehler = [];
-  seite.on('pageerror', (e) => fehler.push(e.message));
-  seite.on('console', (m) => m.type() === 'error' && fehler.push(m.text()));
-  await seite.addInitScript(iosStimme);
-  await seite.goto(SEITE);
-  await seite.evaluate(() => document.fonts.ready);
-  if (BILDER) await seite.screenshot({ path: `${BILDER}/start.png` });
+// Wartet, bis die Aufgabe sichtbar ist und noch keine Ziffer steht, oder bis die Runde endet.
+const sichtbar = async (seite) => {
+  await seite.waitForFunction(() => {
+    const f = document.querySelector('#gleichung .feld:not(.fertig)');
+    return !document.getElementById('ende').hidden || (f && !f.textContent);
+  }, undefined, { timeout: 15000 });
+  if (!(await seite.isHidden('#ende'))) return null;
+  return seite.getAttribute('#gleichung', 'aria-label');
+};
 
+async function layoutPasst(seite) {
   await seite.tap('#los');
-  const zuBreit = await seite.evaluate(() => {
+  const raus = await seite.evaluate(() => {
     const weg = document.createElement('div');
     weg.id = 'weg';
     const rueck = document.getElementById('rueck'), g = document.getElementById('gleichung');
     rueck.replaceChildren(weg);
-    const raus = [];
+    const liste = [];
     for (const k of Kern.KARTEN) {
       for (const z of [() => 0, () => 0.9]) {
         const a = Kern.aufgabe(k, z);
-        for (const text of Object.values(Kern.rechenweg(k, a))) {
-          weg.textContent = text;
-          const w = weg.getBoundingClientRect(), r = rueck.getBoundingClientRect();
-          if (w.height > r.height + 0.5 || w.width > r.width + 0.5 || weg.scrollWidth > weg.clientWidth) raus.push(text);
-        }
+        weg.textContent = Kern.rechenweg(k, a);
+        const w = weg.getBoundingClientRect(), r = rueck.getBoundingClientRect();
+        if (w.height > r.height + 0.5 || w.width > r.width + 0.5 || weg.scrollWidth > weg.clientWidth) liste.push(weg.textContent);
         zeichneGleichung(a, String(a.loesung), true);
-        const r = g.lastElementChild.getBoundingClientRect(), l = g.firstElementChild.getBoundingClientRect();
-        if (l.left < 0 || r.right > innerWidth) raus.push(a.zeige);
+        if (g.firstElementChild.getBoundingClientRect().left < 0 || g.lastElementChild.getBoundingClientRect().right > innerWidth) liste.push(a.zeige);
       }
     }
-    rueck.replaceChildren();
-    return raus;
+    const p = document.getElementById('pad').getBoundingClientRect();
+    if (document.documentElement.scrollHeight > innerHeight || p.bottom > innerHeight) liste.push('Seite rollt');
+    return liste;
   });
-  assert.deepStrictEqual(zuBreit, [], `Zu breit: ${zuBreit}`);
-  await seite.reload();
+  assert.deepStrictEqual(raus, [], `Passt nicht: ${raus}`);
+  await leeren(seite);
+}
+
+async function erstHoeren(seite) {
   await seite.tap('#los');
-  const erste = await liesAufgabe(seite);
-  await seite.waitForTimeout(100);
-  if (BILDER) await seite.screenshot({ path: `${BILDER}/aufgabe.png` });
-  const f1 = await passt(seite);
-  assert.ok(f1.hoch <= 0 && f1.breit <= 0 && f1.padUnten <= 0, `Passt nicht: ${JSON.stringify(f1)}`);
-  await seite.waitForTimeout(150);
-  assert.ok((await seite.evaluate(() => window.gesprochen.length)) >= 1, 'Erste Ansage blieb stumm');
-
-  await tippe(seite, loese(erste));
+  await seite.waitForTimeout(120);
+  assert.strictEqual(await seite.locator('#gleichung span').count(), 0, 'Aufgabe sichtbar, bevor die Ansage endet');
+  assert.strictEqual(await seite.locator('#hoeren').count(), 1);
+  assert.ok((await seite.evaluate(() => window.gesagtJetzt)), 'Erste Ansage blieb stumm');
+  await bild(seite, 'hoeren');
+  const t = await sichtbar(seite);
+  await bild(seite, 'aufgabe');
+  await tippe(seite, loese(t));
   await seite.waitForSelector('#blitz');
-  if (BILDER) { await seite.waitForTimeout(260); await seite.screenshot({ path: `${BILDER}/blitz.png` }); }
+  await seite.waitForTimeout(260);
+  await bild(seite, 'blitz');
+  assert.strictEqual((await stand(seite)).versuche.at(-1).ergebnis, 'schnell');
+}
 
-  await wartePaar(seite, erste);
-  const zweite = await liesAufgabe(seite);
-  await seite.waitForTimeout(250);
-  const falsch = loese(zweite) === '9' ? '8' : '9'.repeat(loese(zweite).length);
+async function antwortWaehrendAnsage(seite) {
+  await seite.waitForFunction(() => document.getElementById('hoeren') && window.gesagtJetzt);
+  const gesagt = await seite.evaluate(() => window.gesagtJetzt);
+  await tippe(seite, loeseGesagt(gesagt));
+  await seite.waitForSelector('#blitz');
+  const v = (await stand(seite)).versuche.at(-1);
+  assert.deepStrictEqual([v.ergebnis, v.ms], ['schnell', 0], JSON.stringify(v));
+}
+
+async function falschUndWiederkehr(seite) {
+  const t = await sichtbar(seite);
+  const falsch = loese(t) === '9' ? '8' : '9'.repeat(loese(t).length);
+  const start = (await stand(seite)).versuche.length;
   await tippe(seite, falsch);
   await seite.waitForSelector('#weg');
-  await seite.waitForTimeout(300);
-  if (BILDER) await seite.screenshot({ path: `${BILDER}/korrektur.png` });
-  assert.ok(!(await seite.textContent('#gleichung')).includes(falsch) || falsch === loese(zweite), 'Falsche Eingabe bleibt stehen');
-  await seite.waitForTimeout(1500);
-  const gesagt = await seite.evaluate(() => window.gesprochen.at(-1));
-  assert.ok(/ ist \d+$/.test(gesagt.text), `Korrektur nicht vorgelesen: ${gesagt.text}`);
-  assert.ok(gesagt.rueck.includes(loese(zweite)), `Korrektur vor Ansage-Ende weg: ${gesagt.rueck}`);
+  const seit = Date.now();
+  assert.ok((await seite.textContent('#gleichung')).endsWith(loese(t)), 'Lösung steht nicht in der Gleichung');
+  await bild(seite, 'korrektur');
+  await seite.waitForSelector('#weg', { state: 'detached', timeout: 12000 });
+  const dauer = Date.now() - seit;
+  assert.ok(dauer >= 5300, `Korrektur stand nur ${dauer} ms`);
+  const gesagt = await seite.evaluate(() => window.gesprochen.filter((g) => / ist /.test(g.text)).at(-1));
+  assert.ok(gesagt.rueck.includes(loese(t)), 'Korrektur vor Ansage-Ende weg');
+  for (let i = 0; i < 2; i++) await tippe(seite, loese(await sichtbar(seite)));
+  await seite.waitForFunction((n) => JSON.parse(localStorage.getItem('rechentrainer-v1')).versuche.length === n, start + 3);
+  await tippe(seite, loese(await sichtbar(seite)));
+  await seite.waitForFunction((n) => JSON.parse(localStorage.getItem('rechentrainer-v1')).versuche.length === n, start + 4);
+  const v = (await stand(seite)).versuche;
+  assert.strictEqual(v[start + 3].karte, v[start].karte, 'Aufgabe kam nicht nach zwei anderen wieder');
+}
 
-  for (let alt = zweite, i = 0; i < 40; i++) {
-    await seite.waitForFunction((a) => !document.getElementById('ende').hidden || (document.getElementById('gleichung').getAttribute('aria-label') !== a && !document.querySelector('#rueck svg, #weg')), alt, { timeout: 15000 });
-    if (!(await seite.isHidden('#ende'))) break;
-    const t = await liesAufgabe(seite);
-    alt = t;
-    const text = await seite.textContent('#runde');
-    assert.ok(!/\d\s*(s|ms|sek)/i.test(text.replace(/\s/g, ' ').match(/[a-z]+/i) ? '' : text), 'Zeitangabe sichtbar');
+async function zeitAbgelaufen(seite) {
+  await leeren(seite);
+  await seite.tap('#los');
+  await sichtbar(seite);
+  const seit = Date.now();
+  await seite.waitForSelector('#weg', { timeout: 7000 });
+  const dauer = Date.now() - seit;
+  assert.ok(dauer > 4700 && dauer < 5800, `Lösung kam nach ${dauer} ms`);
+  const v = (await stand(seite)).versuche.at(-1);
+  assert.deepStrictEqual([v.ergebnis, v.antwort, v.stufe_nach], ['langsam', null, 1], JSON.stringify(v));
+  await bild(seite, 'zeit');
+  await seite.waitForTimeout(1700);
+  assert.ok(/ ist \d+$/.test(await seite.evaluate(() => window.gesprochen.at(-1).text)), 'Lösung nicht vorgelesen');
+  await seite.tap('[data-z="1"]');
+  assert.strictEqual((await stand(seite)).versuche.length, 1, 'Eingabe während der Lösung wurde gewertet');
+}
+
+async function ganzeRunde(seite) {
+  await leeren(seite);
+  await seite.tap('#los');
+  for (let i = 0; i < 25; i++) {
+    const t = await sichtbar(seite);
+    if (!t) break;
+    assert.ok(!/[a-zäöüß]/i.test(await seite.textContent('#runde')), 'Text oder Zeitangabe während der Aufgabe');
     await tippe(seite, loese(t));
   }
   await seite.waitForSelector('#ende:not([hidden])');
-  if (BILDER) await seite.screenshot({ path: `${BILDER}/ende.png` });
-
-  const stand = await seite.evaluate(() => JSON.parse(localStorage.getItem('rechentrainer-v1')));
-  assert.strictEqual(stand.versuche.length, 20, `${stand.versuche.length} Versuche`);
-  assert.ok(stand.versuche.every((v) => /^[pmxd]_\d{1,2}_\d{1,2}$/.test(v.karte) && ['schnell', 'langsam', 'falsch'].includes(v.ergebnis)));
-  assert.ok(stand.versuche.some((v) => v.ergebnis === 'falsch'));
-  const gesehen = Object.keys(stand.staende).length;
-
+  await bild(seite, 'ende');
+  const s = await stand(seite);
+  assert.strictEqual(s.versuche.length, 20);
+  assert.ok(s.versuche.every((v) => /^[pmxd]_\d{1,2}_\d{1,2}$/.test(v.karte)));
   await seite.reload();
-  const nachher = await seite.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('rechentrainer-v1')).staende).length);
-  assert.strictEqual(nachher, gesehen, 'Fortschritt nach Neuladen verloren');
+  assert.strictEqual(Object.keys((await stand(seite)).staende).length, Object.keys(s.staende).length, 'Fortschritt verloren');
+}
 
-  await seite.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem('rechentrainer-v1'));
-    s.staende = {}; s.versuche = []; s.tag = { datum: '', neu: 0 };
-    localStorage.setItem('rechentrainer-v1', JSON.stringify(s));
-  });
-  await seite.reload();
-  await seite.tap('#los');
-  await seite.waitForSelector('#weg', { timeout: 23000 });
-  const tipp = await seite.textContent('#weg');
-  assert.ok(tipp.startsWith('Tipp: '), tipp);
-  assert.ok(!(await seite.textContent('#gleichung')).trim().endsWith('='.repeat(2)));
-  if (BILDER) await seite.screenshot({ path: `${BILDER}/tipp.png` });
-  const h = await liesAufgabe(seite);
-  await tippe(seite, loese(h));
-  await seite.waitForSelector('#haken');
-  const letzter = await seite.evaluate(() => JSON.parse(localStorage.getItem('rechentrainer-v1')).versuche.at(-1));
-  assert.strictEqual(letzter.ergebnis, 'falsch', 'Antwort mit Tipp darf nicht als gekonnt zählen');
+(async () => {
+  await new Promise((r) => dienst.listen(0, '127.0.0.1', r));
+  const browser = await chromium.launch();
+  const seite = await (await browser.newContext(FORMAT)).newPage();
+  const fehler = [];
+  seite.on('pageerror', (e) => fehler.push(e.message));
+  seite.on('console', (m) => m.type() === 'error' && fehler.push(m.text()));
+  await seite.addInitScript(iosStimme);
+  await seite.goto(`http://127.0.0.1:${dienst.address().port}/`);
+  await seite.evaluate(() => document.fonts.ready);
+  await bild(seite, 'start');
 
+  for (const [name, fn] of Object.entries({ layoutPasst, erstHoeren, antwortWaehrendAnsage, falschUndWiederkehr, zeitAbgelaufen, ganzeRunde })) {
+    await fn(seite);
+    console.log(`ok  ${name}`);
+  }
   await browser.close();
   dienst.close();
   assert.deepStrictEqual(fehler, [], `JS-Fehler: ${fehler}`);
-  console.log(`BESTANDEN: ${stand.versuche.length} Aufgaben, ${gesehen} Karten gesehen, Fortschritt bleibt, Tipp kommt, nichts rollt im Format 360 × 640`);
+  console.log('BESTANDEN');
 })().catch((e) => { console.error('DURCHGEFALLEN:', e.message); process.exit(1); });

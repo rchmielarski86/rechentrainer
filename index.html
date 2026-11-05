@@ -13,7 +13,7 @@
 @font-face { font-family: Andika; src: url(schrift/andika-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
 :root {
   color-scheme: light;
-  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c; --gruen: #16794c;
+  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c;
   --k: min(calc(100vw / 18), calc(100vh / 33), 26px);
 }
 @supports (height: 100svh) { :root { --k: min(calc(100vw / 18), calc(100svh / 33), 26px); } }
@@ -55,8 +55,9 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 #rueck { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--k) * 0.3); min-height: calc(var(--k) * 6); text-align: center; }
 #rueck svg { width: calc(var(--k) * 2.4); height: calc(var(--k) * 2.4); }
 #blitz path { fill: var(--tinte); }
-#haken path { fill: none; stroke: var(--gruen); stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 30; animation: strich 0.22s ease-out; }
-@keyframes strich { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+#hoeren { width: calc(var(--k) * 3); height: calc(var(--k) * 3); margin: 0 auto; }
+#hoeren path { fill: none; stroke: var(--tinte); stroke-width: 2; stroke-linecap: round; }
+#hoeren .voll { fill: var(--tinte); stroke: none; }
 #weg { max-width: 100%; font-weight: 700; font-size: calc(var(--k) * 1.15); line-height: 1.35; }
 
 #pad { display: grid; grid-template-columns: repeat(3, calc(var(--k) * 5)); gap: calc(var(--k) * 0.5); user-select: none; -webkit-user-select: none; }
@@ -72,7 +73,6 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 
 @media (prefers-reduced-motion: reduce) {
   .gleichung::before { transition: none; }
-  #haken path { animation: none; }
 }
 </style>
 </head>
@@ -107,11 +107,11 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 <script>
 'use strict';
 const EINSTELLUNG = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
-const HILFE_MS = 20000;
+const STANDZEIT_MS = 4000;
 const WACHE_MS = 6000;
 const SPEICHER = 'rechentrainer-v1';
 const BLITZ = '<svg id="blitz" viewBox="0 0 24 24" aria-label="Blitzschnell"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>';
-const HAKEN = '<svg id="haken" viewBox="0 0 24 24" aria-label="Richtig"><path d="M4 13l5 5L20 6"/></svg>';
+const HOEREN = '<svg id="hoeren" viewBox="0 0 24 24" aria-label="Hör zu"><path class="voll" d="M3 9v6h4l6 5V4L7 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
 
 const $ = (id) => document.getElementById(id);
 const warte = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -209,64 +209,76 @@ function ziffer(wert, zeit) {
   t.fertig(t);
 }
 
+function zeigeHoeren() {
+  const g = $('gleichung');
+  g.style.paddingLeft = '';
+  g.classList.remove('blitz');
+  g.innerHTML = HOEREN;
+  g.setAttribute('aria-label', 'Hör zu');
+}
+
+function zeigeLoesung(a, weg) {
+  zeichneGleichung(a, String(a.loesung), true);
+  $('rueck').innerHTML = '<div id="weg"></div>';
+  $('weg').textContent = weg;
+  return sprich(a.korrektur).then(() => warte(STANDZEIT_MS));
+}
+
+// Erst nur hören, dann erscheint die Aufgabe und die Zeit läuft. Antworten schon während der Ansage zählen sofort.
 async function stelle(e, spur) {
   const a = Kern.aufgabe(e.karte, Math.random);
-  const weg = Kern.rechenweg(e.karte, a);
   const stand = z.staende[e.karte.id];
-  const limit = Kern.zeitlimit(stand ? stand.stufe : 0, EINSTELLUNG.zeitlimit_ms);
-  zeichneGleichung(a, '');
+  zeigeHoeren();
   zeichneSpur(spur);
-  $('gleichung').classList.remove('blitz');
   $('rueck').replaceChildren();
 
-  let ansageEnde = null, hilfe = false, hilfeUhr = null;
+  const antwort = tippen(String(a.loesung).length, a);
+  let ansageEnde = null, uhr = null;
   const ansage = sprich(a.sprich).then(() => {
     ansageEnde = performance.now();
-    hilfeUhr = setTimeout(() => {
+    if (!tipp) return;
+    if (!tipp.wert) zeichneGleichung(a, '');
+    uhr = setTimeout(() => {
       if (!tipp || tipp.wert) return;
-      hilfe = true;
-      $('rueck').innerHTML = '<div id="weg"></div>';
-      $('weg').textContent = `Tipp: ${weg.hilfe}`;
-    }, HILFE_MS);
+      const t = tipp;
+      tipp = null;
+      t.fertig(t);
+    }, EINSTELLUNG.zeitlimit_ms);
   });
-  const t = await tippen(String(a.loesung).length, a);
+  const t = await antwort;
   if (ansageEnde === null && kannSprechen) speechSynthesis.cancel();
   await ansage;
-  clearTimeout(hilfeUhr);
+  clearTimeout(uhr);
 
-  const ms = t.erste < ansageEnde ? 0 : Math.round(t.erste - ansageEnde);
-  const antwort = Number(t.wert);
-  const ergebnis = Kern.bewerte({ antwort, loesung: a.loesung, ms, limit, hilfe });
+  const zeitUm = t.wert === '';
+  const zahl = zeitUm ? null : Number(t.wert);
+  const ergebnis = Kern.bewerte(zahl, a.loesung);
   const warNeu = !stand;
   if (e.versuch === 1) z.staende[e.karte.id] = Kern.naechsterStand(stand, ergebnis, z.tag.datum);
   if (warNeu && ergebnis !== 'schnell') z.tag.neu += 1;
   Kern.verbuche(runde, e, ergebnis, warNeu);
   const neu = z.staende[e.karte.id];
   z.versuche.push({
-    id: crypto.randomUUID(), sitzung, karte: e.karte.id, gezeigt: a.zeige, antwort, ergebnis, ms,
+    id: crypto.randomUUID(), sitzung, karte: e.karte.id, gezeigt: a.zeige, antwort: zahl, ergebnis,
+    ms: zeitUm ? EINSTELLUNG.zeitlimit_ms : Math.max(0, Math.round(t.erste - ansageEnde)),
     stufe_nach: neu.stufe, faellig_am: neu.faellig, beantwortet_am: new Date().toISOString(),
   });
   speichere();
   gerechnet += 1;
 
-  if (antwort !== a.loesung) {
+  if (ergebnis !== 'schnell') {
     spur.push('gut');
     zeichneSpur(spur);
-    zeichneGleichung(a, String(a.loesung), true);
-    $('rueck').innerHTML = '<div id="weg"></div>';
-    $('weg').textContent = weg.weg;
-    await sprich(a.korrektur);
-    await warte(2000);
+    await zeigeLoesung(a, Kern.rechenweg(e.karte, a));
     return;
   }
-  const schnell = ergebnis === 'schnell';
-  if (schnell) blitze += 1;
-  spur.push(schnell ? 'schnell' : 'gut');
+  blitze += 1;
+  spur.push('schnell');
   zeichneSpur(spur);
   zeichneGleichung(a, t.wert, true);
-  $('gleichung').classList.toggle('blitz', schnell);
-  $('rueck').innerHTML = schnell ? BLITZ : HAKEN;
-  await warte(schnell ? 800 : 900);
+  $('gleichung').classList.add('blitz');
+  $('rueck').innerHTML = BLITZ;
+  await warte(800);
 }
 
 async function spiele() {

@@ -4,10 +4,9 @@
   const ZAHLEN = [2, 3, 4, 5, 6, 7, 8, 9];
   const ABSTAENDE = [1, 2, 4, 8, 16, 32];
   const MAX_VERSUCHE = 3;
-  const MIN_ABSTAND = 3;
+  const MIN_ABSTAND = 2;
   const STUFE_BEI_BEKANNT = 3;
   const STUFE_FUER_UMKEHR = 2;
-  const NACHSICHT = { 1: 2.4, 2: 2, 3: 1.6, 4: 1.2 };
 
   function rangPlus(a, b) {
     if (a === b) return 0;
@@ -65,18 +64,18 @@
     };
   }
 
-  const ueber = (kopf, mitte, ergebnis) => ({ hilfe: `${kopf} = ${mitte}`, weg: `${kopf} = ${mitte} = ${ergebnis}` });
+  const ueber = (kopf, mitte, ergebnis) => `${kopf} = ${mitte} = ${ergebnis}`;
 
   function wegPlus(x, y) {
     const g = Math.max(x, y), k = Math.min(x, y), s = x + y, kopf = `${x} + ${y}`;
-    if (x === y) return { hilfe: `Das Doppelte von ${x}`, weg: `${kopf} = ${s}, das Doppelte von ${x}` };
-    if (s === 10) return { hilfe: 'Zehnerfreunde', weg: `${kopf} = 10, Zehnerfreunde` };
+    if (x === y) return `${kopf} = ${s}, das Doppelte von ${x}`;
+    if (s === 10) return `${kopf} = 10, Zehnerfreunde`;
     if (g - k === 1) return ueber(kopf, `${k} + ${k} + 1`, s);
     if (g - k === 2) return ueber(kopf, `${k + 1} + ${k + 1}`, s);
     if (g === 9) return ueber(kopf, `10 + ${k} − 1`, s);
     if (s > 10) return ueber(kopf, `${g} + ${10 - g} + ${s - 10}`, s);
     if (g > 5) return ueber(kopf, `5 + ${g - 5} + ${k}`, s);
-    return { hilfe: `Eine Hand und noch ${k} Finger`, weg: `${kopf} = ${s}` };
+    return `${kopf} = ${s}, eine Hand und noch ${k} Finger`;
   }
 
   function wegMal(x, y) {
@@ -92,17 +91,13 @@
     if (karte.art === 'plus') return wegPlus(a.x, a.y);
     if (karte.art === 'mal') return wegMal(a.x, a.y);
     const z = karte.art === 'minus' ? '+' : '·';
-    return { hilfe: `${a.y} ${z} ? = ${a.x}`, weg: `${a.zeige} = ${a.loesung}, denn ${a.y} ${z} ${a.loesung} = ${a.x}` };
+    return `${a.zeige} = ${a.loesung}, denn ${a.y} ${z} ${a.loesung} = ${a.x}`;
   }
 
-  function bewerte({ antwort, loesung, ms, limit, hilfe }) {
-    if (antwort !== loesung || hilfe) return 'falsch';
-    return ms <= limit ? 'schnell' : 'langsam';
-  }
-
-  // Neue Karten gelten nur bis zum Ziel als bekannt; auf frühen Stufen ist die Grenze großzügig und wird strenger.
-  function zeitlimit(stufe, ziel) {
-    return Math.round(ziel * (NACHSICHT[stufe] || 1));
+  // antwort null: Die Zeit lief ab. Das zählt wie falsch, bleibt für den Bericht aber unterscheidbar.
+  function bewerte(antwort, loesung) {
+    if (antwort === null) return 'langsam';
+    return antwort === loesung ? 'schnell' : 'falsch';
   }
 
   function addiereTage(iso, tage) {
@@ -120,7 +115,6 @@
     const alt = stand ? stand.stufe : 0;
     let stufe = 1;
     if (ergebnis === 'schnell') stufe = alt === 0 ? STUFE_BEI_BEKANNT : Math.min(alt + 1, ABSTAENDE.length);
-    if (ergebnis === 'langsam') stufe = Math.max(alt, 1);
     return { stufe, faellig: addiereTage(datum, ABSTAENDE[stufe - 1]) };
   }
 
@@ -152,7 +146,8 @@
 
   function naechste(runde, staende) {
     if (runde.gestellt >= runde.max) return null;
-    const bereit = runde.plan.findIndex((e) => e.ab <= runde.gestellt);
+    const wieder = runde.plan.findIndex((e) => e.versuch > 1 && e.ab <= runde.gestellt);
+    const bereit = wieder >= 0 ? wieder : runde.plan.findIndex((e) => e.ab <= runde.gestellt);
     const neu = runde.neuRest > 0 ? naechsteNeue(staende) : null;
     let eintrag = null;
     if (bereit >= 0) [eintrag] = runde.plan.splice(bereit, 1);
@@ -165,7 +160,7 @@
   // Bekannte neue Karten kosten kein Tagesbudget: So zeigt sich rasch, was schon sitzt.
   function verbuche(runde, eintrag, ergebnis, warNeu) {
     if (warNeu && ergebnis !== 'schnell') runde.neuRest -= 1;
-    if (ergebnis === 'falsch' && eintrag.versuch < MAX_VERSUCHE) {
+    if (ergebnis !== 'schnell' && eintrag.versuch < MAX_VERSUCHE) {
       runde.plan.push({ karte: eintrag.karte, versuch: eintrag.versuch + 1, ab: runde.gestellt + MIN_ABSTAND });
     }
   }
@@ -176,7 +171,7 @@
     || (neuVerbraucht < einstellung.neue_pro_tag && Boolean(naechsteNeue(staende)));
 
   const Kern = {
-    KARTEN, PRO_ID, aufgabe, rechenweg, bewerte, zeitlimit, addiereTage, heute, naechsterStand,
+    KARTEN, PRO_ID, aufgabe, rechenweg, bewerte, addiereTage, heute, naechsterStand,
     faelligeKarten, naechsteNeue, starteRunde, naechste, verbuche, erwartet, istMehrDa,
   };
   if (typeof module !== 'undefined') module.exports = Kern;

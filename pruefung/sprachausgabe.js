@@ -17,7 +17,7 @@ const LOESUNG = { '7 + 8': '15', '6 · 7': '42', '15 − 8': '7', '42 : 6': '7',
   for (let i = 1; i <= 5; i++) {
     await seite.waitForFunction((n) => document.getElementById('zaehler').textContent.startsWith(`Aufgabe ${n}`)
       && !document.getElementById('eingabe').textContent, i);
-    await seite.waitForTimeout(300);
+    await seite.waitForTimeout(800); // erst nach Ansage-Ende antworten
     const eingabe = i === 5 ? '16' : LOESUNG[await seite.textContent('#aufgabe')]; // letzte Aufgabe absichtlich falsch
     for (const z of eingabe) await seite.tap(`[data-z="${z}"]`);
     await seite.waitForTimeout(950);

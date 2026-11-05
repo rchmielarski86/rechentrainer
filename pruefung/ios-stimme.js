@@ -19,13 +19,14 @@ module.exports = () => {
     speak(u) {
       if (!frei) { if (!imTipp) return; frei = true; }
       aktuell = u;
+      window.gesagtJetzt = u.text;
       setTimeout(() => u.onstart && u.onstart(), 20);
       setTimeout(() => {
         if (aktuell !== u) return;
         aktuell = null;
         gesprochen.push({ text: u.text, rueck: document.getElementById('rueck').textContent });
         u.onend();
-      }, / ist /.test(u.text) ? 1500 : 200);
+      }, / ist /.test(u.text) ? 1500 : 600);
     },
   } });
 };
