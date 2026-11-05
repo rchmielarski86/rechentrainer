@@ -8,6 +8,7 @@ const LOESUNG = { '7 + 8': '15', '6 · 7': '42', '15 − 8': '7', '42 : 6': '7',
 
 const iosStimme = () => {
   let imTipp = false, frei = false, aktuell = null;
+  const gesprochen = window.gesprochen = [];
   const anmelden = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function (typ, fn, opt) {
     if (typ !== 'click') return anmelden.call(this, typ, fn, opt);
@@ -26,7 +27,12 @@ const iosStimme = () => {
       if (!frei) { if (!imTipp) return; frei = true; }
       aktuell = u;
       setTimeout(() => u.onstart && u.onstart(), 20);
-      setTimeout(() => { if (aktuell === u) { aktuell = null; u.onend(); } }, 200);
+      setTimeout(() => {
+        if (aktuell !== u) return;
+        aktuell = null;
+        gesprochen.push({ text: u.text, rueck: document.getElementById('rueck').textContent });
+        u.onend();
+      }, / ist /.test(u.text) ? 1500 : 200);
     },
   } });
 };
@@ -42,14 +48,22 @@ const iosStimme = () => {
     await seite.waitForFunction((n) => document.getElementById('zaehler').textContent.startsWith(`Aufgabe ${n}`)
       && !document.getElementById('eingabe').textContent, i);
     await seite.waitForTimeout(300);
-    for (const z of LOESUNG[await seite.textContent('#aufgabe')]) await seite.tap(`[data-z="${z}"]`);
+    const eingabe = i === 5 ? '16' : LOESUNG[await seite.textContent('#aufgabe')]; // letzte Aufgabe absichtlich falsch
+    for (const z of eingabe) await seite.tap(`[data-z="${z}"]`);
     await seite.waitForTimeout(950);
   }
   await seite.waitForSelector('#ergebnis:not([hidden])');
   const text = await seite.inputValue('#text');
+  const gesprochen = await seite.evaluate(() => window.gesprochen);
   await browser.close();
   console.log(text.split('\n').filter((z) => /Ende-Signal/.test(z)).join('\n'));
   const stumm = !/Ende-Signal 8\/8/.test(text) || !/Ende-Signal 5\/5/.test(text);
-  console.log(stumm ? 'DURCHGEFALLEN: Ansagen blieben stumm.' : 'BESTANDEN');
-  process.exit(stumm ? 1 : 0);
+  const korrektur = gesprochen.find((g) => g.text === '9 plus 6 ist 15');
+  const fehler = [
+    stumm && 'Ansagen blieben stumm',
+    !korrektur && 'Korrektur nicht vorgelesen',
+    korrektur && korrektur.rueck !== '9 + 6 = 15' && 'Korrektur verschwand vor Ansage-Ende',
+  ].filter(Boolean);
+  console.log(fehler.length ? `DURCHGEFALLEN: ${fehler.join(', ')}.` : 'BESTANDEN');
+  process.exit(fehler.length ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });

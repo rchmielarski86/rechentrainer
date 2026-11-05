@@ -24,7 +24,7 @@ button { font: inherit; border: 0; border-radius: 12px; cursor: pointer; touch-a
 .neben { background: var(--karte); color: var(--text); border: 1px solid var(--linie); }
 #aufgabe { font-size: 52px; font-weight: 700; text-align: center; margin: 12px 0 0; font-variant-numeric: tabular-nums; }
 #eingabe { min-height: 46px; font-size: 34px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
-#rueck { min-height: 28px; text-align: center; font-weight: 600; margin-bottom: 12px; }
+#rueck { min-height: 38px; font-size: 26px; text-align: center; font-weight: 600; margin-bottom: 12px; }
 #pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; user-select: none; -webkit-user-select: none; }
 #pad button { min-height: 68px; font-size: 28px; font-weight: 600; background: var(--karte); color: var(--text); border: 1px solid var(--linie); }
 #pad button:active { background: var(--linie); }
@@ -188,8 +188,14 @@ async function stelleAufgabe(a) {
     verzug: Math.round(t.verzug),
     richtig: t.wert === a.loesung, vorEnde, ende: r.ende,
   });
-  $('rueck').textContent = t.wert === a.loesung ? '✓' : `${a.zeige} = ${a.loesung}`;
-  await warte(900);
+  if (t.wert === a.loesung) {
+    $('rueck').textContent = '✓';
+    await warte(900);
+    return;
+  }
+  $('rueck').textContent = `${a.zeige} = ${a.loesung}`;
+  await sprich(`${a.sprich} ist ${a.loesung}`);
+  await warte(1200);
 }
 
 async function rechenrunde() {
