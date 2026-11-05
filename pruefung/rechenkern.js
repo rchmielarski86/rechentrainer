@@ -25,12 +25,10 @@ const pruefungen = {
         const a = K.aufgabe(k, z), weg = K.rechenweg(k, a);
         assert.strictEqual(rechne(a.zeige), k.loesung, a.zeige);
         assert.ok(a.korrektur.endsWith(`ist ${k.loesung}`));
-        const gleichungen = weg.split(/, denn |, /).filter((t) => t.includes('='));
-        for (const g of gleichungen) {
-          const seiten = g.split('=').map((t) => rechne(t));
-          seiten.forEach((s) => assert.strictEqual(s, seiten[0], g));
-        }
-        assert.ok(weg.includes(String(k.loesung)), weg);
+        if (!weg.includes('=')) continue;
+        const seiten = weg.replace('denn ', '').split('=').map((t) => rechne(t));
+        assert.strictEqual(seiten[0], seiten[1], weg);
+        assert.strictEqual(seiten[1], k.basis ? k.x : k.loesung, weg);
       }
     }
   },

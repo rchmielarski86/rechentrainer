@@ -40,7 +40,7 @@ const bild = async (seite, name) => { if (BILDER) await seite.screenshot({ path:
 const sichtbar = async (seite) => {
   await seite.waitForFunction(() => {
     const f = document.querySelector('#gleichung .feld:not(.fertig)');
-    return !document.getElementById('ende').hidden || (f && !f.textContent);
+    return !document.getElementById('ende').hidden || (f && !f.textContent && !document.getElementById('loesung'));
   }, undefined, { timeout: 15000 });
   if (!(await seite.isHidden('#ende'))) return null;
   return seite.getAttribute('#gleichung', 'aria-label');
@@ -49,24 +49,23 @@ const sichtbar = async (seite) => {
 async function layoutPasst(seite) {
   await seite.tap('#los');
   const raus = await seite.evaluate(() => {
-    const weg = document.createElement('div');
-    weg.id = 'weg';
     const rueck = document.getElementById('rueck'), g = document.getElementById('gleichung');
-    rueck.replaceChildren(weg);
     const liste = [];
     for (const k of Kern.KARTEN) {
       for (const z of [() => 0, () => 0.9]) {
         const a = Kern.aufgabe(k, z);
-        weg.textContent = Kern.rechenweg(k, a);
-        const w = weg.getBoundingClientRect(), r = rueck.getBoundingClientRect();
-        if (w.height > r.height + 0.5 || w.width > r.width + 0.5 || weg.scrollWidth > weg.clientWidth) liste.push(weg.textContent);
-        zeichneGleichung(a, String(a.loesung), true);
+        zeichneGleichung(a, '');
+        zeichneLoesung(a, Kern.rechenweg(k, a));
+        const r = rueck.getBoundingClientRect();
+        const l = document.getElementById('loesung').getBoundingClientRect();
+        const w = document.getElementById('weg').getBoundingClientRect();
+        if (l.left < r.left - 0.5 || l.right > r.right + 0.5 || w.right > r.right + 0.5 || w.bottom > r.bottom + 0.5 || l.top < r.top - 0.5) liste.push(a.zeige);
         if (g.firstElementChild.getBoundingClientRect().left < 0 || g.lastElementChild.getBoundingClientRect().right > innerWidth) liste.push(a.zeige);
+        const p = document.getElementById('pad').getBoundingClientRect();
+        if (document.documentElement.scrollHeight > innerHeight || p.bottom > innerHeight) liste.push(`rollt: ${a.zeige}`);
       }
     }
-    const p = document.getElementById('pad').getBoundingClientRect();
-    if (document.documentElement.scrollHeight > innerHeight || p.bottom > innerHeight) liste.push('Seite rollt');
-    return liste;
+    return [...new Set(liste)];
   });
   assert.deepStrictEqual(raus, [], `Passt nicht: ${raus}`);
   await leeren(seite);
@@ -97,24 +96,39 @@ async function antwortWaehrendAnsage(seite) {
   assert.deepStrictEqual([v.ergebnis, v.ms], ['schnell', 0], JSON.stringify(v));
 }
 
+const andere = (soll) => (soll === '9' ? '8' : '9'.repeat(soll.length));
+const anzahlIst = (seite, n) => seite.waitForFunction(
+  ([k, m]) => JSON.parse(localStorage.getItem(k)).versuche.length === m, [SPEICHER, n],
+);
+
+async function bestaetigung(seite, soll, gesamt) {
+  await seite.waitForSelector('#loesung');
+  assert.ok((await seite.textContent('#loesung')).endsWith(`= ${soll}`), 'Lösung fehlt');
+  assert.strictEqual(await seite.textContent('#gleichung .feld'), '', 'Falsche Eingabe bleibt stehen');
+  await bild(seite, 'loesung');
+  await seite.waitForTimeout(7000);
+  assert.strictEqual(await seite.locator('#loesung').count(), 1, 'Es ging ohne Bestätigung weiter');
+  const gesagt = await seite.evaluate(() => window.gesprochen.at(-1));
+  assert.ok(/ ist \d+$/.test(gesagt.text), `Lösung nicht vorgelesen: ${gesagt.text}`);
+  await tippe(seite, andere(soll));
+  await seite.waitForTimeout(100);
+  assert.strictEqual(await seite.textContent('#gleichung .feld'), '', 'Falsch Abgetipptes bleibt stehen');
+  assert.strictEqual(await seite.locator('#loesung').count(), 1, 'Falsch Abgetipptes zählte als Bestätigung');
+  assert.strictEqual((await stand(seite)).versuche.length, gesamt, 'Abtippen wurde als Versuch gewertet');
+  await tippe(seite, soll);
+  await seite.waitForSelector('#loesung', { state: 'detached', timeout: 3000 });
+}
+
 async function falschUndWiederkehr(seite) {
   const t = await sichtbar(seite);
-  const falsch = loese(t) === '9' ? '8' : '9'.repeat(loese(t).length);
   const start = (await stand(seite)).versuche.length;
-  await tippe(seite, falsch);
-  await seite.waitForSelector('#weg');
-  const seit = Date.now();
-  assert.ok((await seite.textContent('#gleichung')).endsWith(loese(t)), 'Lösung steht nicht in der Gleichung');
-  await bild(seite, 'korrektur');
-  await seite.waitForSelector('#weg', { state: 'detached', timeout: 12000 });
-  const dauer = Date.now() - seit;
-  assert.ok(dauer >= 5300, `Korrektur stand nur ${dauer} ms`);
-  const gesagt = await seite.evaluate(() => window.gesprochen.filter((g) => / ist /.test(g.text)).at(-1));
-  assert.ok(gesagt.rueck.includes(loese(t)), 'Korrektur vor Ansage-Ende weg');
+  await tippe(seite, andere(loese(t)));
+  await anzahlIst(seite, start + 1);
+  await bestaetigung(seite, loese(t), start + 1);
   for (let i = 0; i < 2; i++) await tippe(seite, loese(await sichtbar(seite)));
-  await seite.waitForFunction((n) => JSON.parse(localStorage.getItem('rechentrainer-v1')).versuche.length === n, start + 3);
+  await anzahlIst(seite, start + 3);
   await tippe(seite, loese(await sichtbar(seite)));
-  await seite.waitForFunction((n) => JSON.parse(localStorage.getItem('rechentrainer-v1')).versuche.length === n, start + 4);
+  await anzahlIst(seite, start + 4);
   const v = (await stand(seite)).versuche;
   assert.strictEqual(v[start + 3].karte, v[start].karte, 'Aufgabe kam nicht nach zwei anderen wieder');
 }
@@ -122,18 +136,15 @@ async function falschUndWiederkehr(seite) {
 async function zeitAbgelaufen(seite) {
   await leeren(seite);
   await seite.tap('#los');
-  await sichtbar(seite);
+  const t = await sichtbar(seite);
   const seit = Date.now();
-  await seite.waitForSelector('#weg', { timeout: 7000 });
+  await seite.waitForSelector('#loesung', { timeout: 7000 });
   const dauer = Date.now() - seit;
   assert.ok(dauer > 4700 && dauer < 5800, `Lösung kam nach ${dauer} ms`);
   const v = (await stand(seite)).versuche.at(-1);
   assert.deepStrictEqual([v.ergebnis, v.antwort, v.stufe_nach], ['langsam', null, 1], JSON.stringify(v));
-  await bild(seite, 'zeit');
   await seite.waitForTimeout(1700);
-  assert.ok(/ ist \d+$/.test(await seite.evaluate(() => window.gesprochen.at(-1).text)), 'Lösung nicht vorgelesen');
-  await seite.tap('[data-z="1"]');
-  assert.strictEqual((await stand(seite)).versuche.length, 1, 'Eingabe während der Lösung wurde gewertet');
+  await bestaetigung(seite, loese(t), 1);
 }
 
 async function ganzeRunde(seite) {

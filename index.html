@@ -13,7 +13,7 @@
 @font-face { font-family: Andika; src: url(schrift/andika-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
 :root {
   color-scheme: light;
-  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c;
+  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c; --gruen: #12804f;
   --k: min(calc(100vw / 18), calc(100vh / 33), 26px);
 }
 @supports (height: 100svh) { :root { --k: min(calc(100vw / 18), calc(100svh / 33), 26px); } }
@@ -58,7 +58,9 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 #hoeren { width: calc(var(--k) * 3); height: calc(var(--k) * 3); margin: 0 auto; }
 #hoeren path { fill: none; stroke: var(--tinte); stroke-width: 2; stroke-linecap: round; }
 #hoeren .voll { fill: var(--tinte); stroke: none; }
-#weg { max-width: 100%; font-weight: 700; font-size: calc(var(--k) * 1.15); line-height: 1.35; }
+#loesung { font-weight: 700; font-size: calc(var(--k) * 2.1); line-height: 1.15; color: var(--tinte); white-space: nowrap; }
+#loesung b { font-size: calc(var(--k) * 3); color: var(--gruen); }
+#weg { max-width: 100%; font-size: calc(var(--k) * 1.1); line-height: 1.3; }
 
 #pad { display: grid; grid-template-columns: repeat(3, calc(var(--k) * 5)); gap: calc(var(--k) * 0.5); user-select: none; -webkit-user-select: none; }
 #pad button { height: calc(var(--k) * 3); padding: 0; border: 2px solid var(--tinte); border-radius: calc(var(--k) * 0.3); background: #fff; color: var(--tinte); font-weight: 700; font-size: calc(var(--k) * 1.7); }
@@ -107,7 +109,7 @@ h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--ti
 <script>
 'use strict';
 const EINSTELLUNG = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
-const STANDZEIT_MS = 4000;
+const NACH_ABTIPPEN_MS = 700;
 const WACHE_MS = 6000;
 const SPEICHER = 'rechentrainer-v1';
 const BLITZ = '<svg id="blitz" viewBox="0 0 24 24" aria-label="Blitzschnell"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>';
@@ -217,11 +219,33 @@ function zeigeHoeren() {
   g.setAttribute('aria-label', 'Hör zu');
 }
 
-function zeigeLoesung(a, weg) {
-  zeichneGleichung(a, String(a.loesung), true);
-  $('rueck').innerHTML = '<div id="weg"></div>';
-  $('weg').textContent = weg;
-  return sprich(a.korrektur).then(() => warte(STANDZEIT_MS));
+function zeichneLoesung(a, weg) {
+  const zeile = document.createElement('div');
+  const wert = document.createElement('b');
+  const erklaerung = document.createElement('div');
+  zeile.id = 'loesung';
+  zeile.textContent = `${a.zeige} = `;
+  wert.textContent = a.loesung;
+  zeile.append(wert);
+  erklaerung.id = 'weg';
+  erklaerung.textContent = weg;
+  $('rueck').replaceChildren(zeile, erklaerung);
+}
+
+// Die Pause gehört dem Kind: Weiter geht es erst, wenn die Lösung richtig abgetippt ist, ohne Zeitlimit.
+async function zeigeLoesung(a, weg) {
+  const soll = String(a.loesung);
+  zeichneLoesung(a, weg);
+  const vorlesen = sprich(a.korrektur);
+  let wert = '';
+  while (wert !== soll) {
+    zeichneGleichung(a, '');
+    ({ wert } = await tippen(soll.length, a));
+  }
+  if (kannSprechen && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+  await vorlesen;
+  zeichneGleichung(a, soll, true);
+  await warte(NACH_ABTIPPEN_MS);
 }
 
 // Erst nur hören, dann erscheint die Aufgabe und die Zeit läuft. Antworten schon während der Ansage zählen sofort.

@@ -64,34 +64,34 @@
     };
   }
 
-  const ueber = (kopf, mitte, ergebnis) => `${kopf} = ${mitte} = ${ergebnis}`;
+  const ueber = (mitte, ergebnis) => `${mitte} = ${ergebnis}`;
 
   function wegPlus(x, y) {
-    const g = Math.max(x, y), k = Math.min(x, y), s = x + y, kopf = `${x} + ${y}`;
-    if (x === y) return `${kopf} = ${s}, das Doppelte von ${x}`;
-    if (s === 10) return `${kopf} = 10, Zehnerfreunde`;
-    if (g - k === 1) return ueber(kopf, `${k} + ${k} + 1`, s);
-    if (g - k === 2) return ueber(kopf, `${k + 1} + ${k + 1}`, s);
-    if (g === 9) return ueber(kopf, `10 + ${k} − 1`, s);
-    if (s > 10) return ueber(kopf, `${g} + ${10 - g} + ${s - 10}`, s);
-    if (g > 5) return ueber(kopf, `5 + ${g - 5} + ${k}`, s);
-    return `${kopf} = ${s}, eine Hand und noch ${k} Finger`;
+    const g = Math.max(x, y), k = Math.min(x, y), s = x + y;
+    if (x === y) return `Das Doppelte von ${x}`;
+    if (s === 10) return 'Zehnerfreunde';
+    if (g - k === 1) return ueber(`${k} + ${k} + 1`, s);
+    if (g - k === 2) return ueber(`${k + 1} + ${k + 1}`, s);
+    if (g === 9) return ueber(`10 + ${k} − 1`, s);
+    if (s > 10) return ueber(`${g} + ${10 - g} + ${s - 10}`, s);
+    if (g > 5) return ueber(`5 + ${g - 5} + ${k}`, s);
+    return `Eine Hand und noch ${k} Finger`;
   }
 
   function wegMal(x, y) {
-    const g = Math.max(x, y), k = Math.min(x, y), p = x * y, kopf = `${x} · ${y}`;
-    if (k === 2) return ueber(kopf, `${g} + ${g}`, p);
-    if (g === 9) return ueber(kopf, `10 · ${k} − ${k}`, p);
-    if (g === 5 || k === 5) return ueber(kopf, `10 · ${g === 5 ? k : g} : 2`, p);
+    const g = Math.max(x, y), k = Math.min(x, y), p = x * y;
+    if (k === 2) return ueber(`${g} + ${g}`, p);
+    if (g === 9) return ueber(`10 · ${k} − ${k}`, p);
+    if (g === 5 || k === 5) return ueber(`10 · ${g === 5 ? k : g} : 2`, p);
     const teile = { 3: `2 · ${g} + ${g}`, 4: `2 · ${g} + 2 · ${g}`, 6: `5 · ${g} + ${g}`, 7: `5 · ${g} + 2 · ${g}`, 8: `4 · ${g} + 4 · ${g}` };
-    return ueber(kopf, teile[k], p);
+    return ueber(teile[k], p);
   }
 
   function rechenweg(karte, a) {
     if (karte.art === 'plus') return wegPlus(a.x, a.y);
     if (karte.art === 'mal') return wegMal(a.x, a.y);
     const z = karte.art === 'minus' ? '+' : '·';
-    return `${a.zeige} = ${a.loesung}, denn ${a.y} ${z} ${a.loesung} = ${a.x}`;
+    return `denn ${a.y} ${z} ${a.loesung} = ${a.x}`;
   }
 
   // antwort null: Die Zeit lief ab. Das zählt wie falsch, bleibt für den Bericht aber unterscheidbar.
