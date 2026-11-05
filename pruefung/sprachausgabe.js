@@ -1,41 +1,11 @@
-// Prüft eine Seite gegen eine Sprachausgabe mit den Regeln von iOS: ohne Tipp wird speak() still verworfen.
+// Prüft die Technik-Testseite gegen die Sprachausgabe nach iOS-Regeln.
 // Aufruf: node pruefung/sprachausgabe.js [pfad/zur/seite.html]
 const { chromium, devices } = require('playwright');
 const path = require('path');
+const iosStimme = require('./ios-stimme.js');
 
 const SEITE = path.resolve(process.argv[2] || path.join(__dirname, '../test/index.html'));
 const LOESUNG = { '7 + 8': '15', '6 · 7': '42', '15 − 8': '7', '42 : 6': '7', '9 + 6': '15' };
-
-const iosStimme = () => {
-  let imTipp = false, frei = false, aktuell = null;
-  const gesprochen = window.gesprochen = [];
-  const anmelden = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function (typ, fn, opt) {
-    if (typ !== 'click') return anmelden.call(this, typ, fn, opt);
-    return anmelden.call(this, typ, function (e) {
-      imTipp = true;
-      try { return fn.call(this, e); } finally { imTipp = false; }
-    }, opt);
-  };
-  window.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
-  const stimmen = [{ name: 'Anna', lang: 'de-DE', localService: true }];
-  Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
-    getVoices: () => stimmen,
-    addEventListener() {},
-    cancel() { const c = aktuell; aktuell = null; if (c && c.onerror) c.onerror({ error: 'interrupted' }); },
-    speak(u) {
-      if (!frei) { if (!imTipp) return; frei = true; }
-      aktuell = u;
-      setTimeout(() => u.onstart && u.onstart(), 20);
-      setTimeout(() => {
-        if (aktuell !== u) return;
-        aktuell = null;
-        gesprochen.push({ text: u.text, rueck: document.getElementById('rueck').textContent });
-        u.onend();
-      }, / ist /.test(u.text) ? 1500 : 200);
-    },
-  } });
-};
 
 (async () => {
   const browser = await chromium.launch();

@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f7fafd">
+<title>Rechentrainer</title>
+<link rel="icon" href="data:,">
+<link rel="preload" href="schrift/andika-700.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: Andika; src: url(schrift/andika-400.woff2) format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Andika; src: url(schrift/andika-700.woff2) format('woff2'); font-weight: 700; font-display: swap; }
+:root {
+  color-scheme: light;
+  --papier: #f7fafd; --tisch: #e6eef5; --karo: #d6e4f0; --tinte: #1c3fb0; --blei: #2c3138; --marker: #ffe45c; --gruen: #16794c;
+  --k: min(calc(100vw / 18), calc(100vh / 33), 26px);
+}
+@supports (height: 100svh) { :root { --k: min(calc(100vw / 18), calc(100svh / 33), 26px); } }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--tisch); color: var(--blei); font: 400 calc(var(--k) * 1.05)/1.4 Andika, system-ui, sans-serif; touch-action: manipulation; }
+main {
+  position: relative; width: calc(var(--k) * 18); min-height: 100vh; min-height: 100svh; margin: 0 auto; overflow: hidden;
+  background-color: var(--papier);
+  background-image: linear-gradient(var(--karo) 1px, transparent 1px), linear-gradient(90deg, var(--karo) 1px, transparent 1px);
+  background-size: var(--k) var(--k);
+}
+section { padding: var(--k); }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible { outline: 3px solid var(--tinte); outline-offset: 2px; }
+h1 { margin: 0; font-size: calc(var(--k) * 2); line-height: 1.2; color: var(--tinte); }
+.block { display: block; width: calc(var(--k) * 16); height: calc(var(--k) * 3); border: 0; border-radius: calc(var(--k) * 0.3); background: var(--tinte); color: #fff; font-weight: 700; font-size: calc(var(--k) * 1.3); }
+.block:active { background: #152f85; }
+
+.gleichung { position: relative; display: flex; align-items: center; height: calc(var(--k) * 4); color: var(--tinte); font-weight: 700; font-size: calc(var(--k) * 2.9); line-height: 1; font-variant-numeric: tabular-nums; }
+.gleichung::before { content: ''; position: absolute; left: 0; right: 0; top: calc(var(--k) * 0.5); height: calc(var(--k) * 3); background: var(--marker); mix-blend-mode: multiply; transform: scaleX(0); transform-origin: left; transition: transform 0.22s ease-out; }
+.gleichung.blitz::before { transform: scaleX(1); }
+.gleichung span { position: relative; flex: 0 0 calc(var(--k) * 2); height: calc(var(--k) * 3); line-height: calc(var(--k) * 3); text-align: center; }
+.gleichung .feld { background: #fff; box-shadow: inset 0 0 0 2px var(--tinte); }
+.gleichung .fertig { background: none; box-shadow: none; }
+
+#start h1 { margin-top: calc(var(--k) * 4); }
+#start .gleichung { margin: calc(var(--k) * 2) 0 calc(var(--k) * 3); margin-left: calc(var(--k) * -1); }
+#start p { margin: 0 0 calc(var(--k) * 2); }
+
+#runde { display: flex; flex-direction: column; min-height: 100vh; min-height: 100svh; padding: var(--k) var(--k) calc(var(--k) * 1.5); }
+#spur { display: flex; gap: 0; height: var(--k); }
+#spur i { flex: 0 0 calc(var(--k) * 0.8); height: calc(var(--k) * 0.8); box-shadow: inset 0 0 0 1px var(--tinte); }
+#spur i.gut { background: var(--tinte); }
+#spur i.schnell { background: var(--marker); }
+#runde .gleichung { margin: var(--k) calc(var(--k) * -1) 0; }
+
+#rueck { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--k) * 0.3); min-height: calc(var(--k) * 6); text-align: center; }
+#rueck svg { width: calc(var(--k) * 2.4); height: calc(var(--k) * 2.4); }
+#blitz path { fill: var(--tinte); }
+#haken path { fill: none; stroke: var(--gruen); stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 30; animation: strich 0.22s ease-out; }
+@keyframes strich { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+#weg { max-width: 100%; font-weight: 700; font-size: calc(var(--k) * 1.15); line-height: 1.35; }
+
+#pad { display: grid; grid-template-columns: repeat(3, calc(var(--k) * 5)); gap: calc(var(--k) * 0.5); user-select: none; -webkit-user-select: none; }
+#pad button { height: calc(var(--k) * 3); padding: 0; border: 2px solid var(--tinte); border-radius: calc(var(--k) * 0.3); background: #fff; color: var(--tinte); font-weight: 700; font-size: calc(var(--k) * 1.7); }
+#pad button:active { background: var(--marker); }
+#pad button:last-child { grid-column: 2; }
+
+#ende h1 { margin-top: calc(var(--k) * 4); }
+#ende p { margin: var(--k) 0 0; }
+#ende .blitze { display: flex; align-items: center; gap: calc(var(--k) * 0.5); margin: var(--k) 0 0; font-weight: 700; font-size: calc(var(--k) * 1.6); color: var(--tinte); }
+#ende .blitze svg { width: calc(var(--k) * 2); height: calc(var(--k) * 2); fill: var(--tinte); }
+#ende .block { margin-top: calc(var(--k) * 2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gleichung::before { transition: none; }
+  #haken path { animation: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <section id="start">
+    <h1>Rechentrainer</h1>
+    <div class="gleichung" aria-hidden="true" id="vorne"></div>
+    <p id="anrede"></p>
+    <button class="block" id="los">Los geht's</button>
+  </section>
+
+  <section id="runde" hidden>
+    <div id="spur" aria-hidden="true"></div>
+    <div class="gleichung" id="gleichung" role="img" aria-live="polite"></div>
+    <div id="rueck" aria-live="polite"></div>
+    <div id="pad"></div>
+  </section>
+
+  <section id="ende" hidden>
+    <h1>Geschafft!</h1>
+    <p id="bilanz"></p>
+    <div class="blitze" id="blitze" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg><span id="blitzzahl"></span>
+    </div>
+    <p id="ausblick"></p>
+    <button class="block" id="mehr">Noch eine Runde</button>
+  </section>
+</main>
+
+<script src="kern.js"></script>
+<script>
+'use strict';
+const EINSTELLUNG = { zeitlimit_ms: 5000, aufgaben_pro_runde: 20, neue_pro_tag: 4 };
+const HILFE_MS = 20000;
+const WACHE_MS = 6000;
+const SPEICHER = 'rechentrainer-v1';
+const BLITZ = '<svg id="blitz" viewBox="0 0 24 24" aria-label="Blitzschnell"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>';
+const HAKEN = '<svg id="haken" viewBox="0 0 24 24" aria-label="Richtig"><path d="M4 13l5 5L20 6"/></svg>';
+
+const $ = (id) => document.getElementById(id);
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+const zeige = (id) => document.querySelectorAll('section').forEach((s) => { s.hidden = s.id !== id; });
+const kannSprechen = 'speechSynthesis' in window;
+
+function lade() {
+  const leer = { staende: {}, versuche: [], tag: { datum: '', neu: 0 } };
+  try { return { ...leer, ...JSON.parse(localStorage.getItem(SPEICHER)) }; } catch { return leer; }
+}
+function speichere() {
+  try { localStorage.setItem(SPEICHER, JSON.stringify(z)); } catch { /* läuft dann nur im Speicher weiter */ }
+}
+
+const z = lade();
+const gehalten = [];
+let stimme = null, tipp = null, runde = null, sitzung = '', gerechnet = 0, blitze = 0;
+
+function tagesstand() {
+  const datum = Kern.heute();
+  if (z.tag.datum !== datum) z.tag = { datum, neu: 0 };
+  return datum;
+}
+
+function stimmenLaden() {
+  return new Promise((fertig) => {
+    const jetzt = speechSynthesis.getVoices();
+    if (jetzt.length) return fertig(jetzt);
+    const ende = () => fertig(speechSynthesis.getVoices());
+    speechSynthesis.addEventListener('voiceschanged', ende, { once: true });
+    setTimeout(ende, 3000);
+  });
+}
+
+function waehle(alle) {
+  const de = alle.filter((v) => /^de([-_]|$)/i.test(v.lang));
+  return de.find((v) => v.localService && /^de[-_]DE/i.test(v.lang)) || de.find((v) => v.localService) || de[0] || null;
+}
+
+function sprich(text) {
+  if (!kannSprechen) return Promise.resolve();
+  return new Promise((fertig) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = stimme ? stimme.lang.replace('_', '-') : 'de-DE';
+    if (stimme) u.voice = stimme;
+    gehalten.push(u);
+    if (gehalten.length > 8) gehalten.shift();
+    const wache = setTimeout(() => { fertig(); speechSynthesis.cancel(); }, WACHE_MS);
+    const schluss = () => { clearTimeout(wache); fertig(); };
+    u.onend = schluss;
+    u.onerror = schluss;
+    speechSynthesis.speak(u);
+  });
+}
+
+function schreibe(ziel, zeichen) {
+  ziel.style.paddingLeft = `calc(var(--k) * ${(18 - 2 * zeichen.length) / 2})`;
+  ziel.replaceChildren(...zeichen.map((c) => {
+    const s = document.createElement('span');
+    s.textContent = c.text;
+    s.className = c.klasse || '';
+    return s;
+  }));
+}
+
+function zeichneGleichung(a, wert, fertig) {
+  const links = [...String(a.x), a.zeichen, ...String(a.y), '='].map((text) => ({ text }));
+  const stellen = String(a.loesung).length;
+  const rechts = Array.from({ length: stellen }, (_, i) => ({ text: wert[i] || '', klasse: fertig ? 'feld fertig' : 'feld' }));
+  schreibe($('gleichung'), [...links, ...rechts]);
+  $('gleichung').setAttribute('aria-label', `${a.zeige} =`);
+}
+
+function zeichneSpur(ergebnisse) {
+  const n = Kern.erwartet(runde);
+  $('spur').replaceChildren(...Array.from({ length: n }, (_, i) => {
+    const q = document.createElement('i');
+    if (ergebnisse[i]) q.className = ergebnisse[i];
+    return q;
+  }));
+}
+
+function tippen(stellen, a) {
+  return new Promise((fertig) => { tipp = { stellen, a, wert: '', erste: null, fertig }; });
+}
+
+function ziffer(wert, zeit) {
+  const t = tipp;
+  if (!t) return;
+  if (t.erste === null) t.erste = zeit;
+  t.wert += wert;
+  zeichneGleichung(t.a, t.wert);
+  if (t.wert.length < t.stellen) return;
+  tipp = null;
+  t.fertig(t);
+}
+
+async function stelle(e, spur) {
+  const a = Kern.aufgabe(e.karte, Math.random);
+  const weg = Kern.rechenweg(e.karte, a);
+  const stand = z.staende[e.karte.id];
+  const limit = Kern.zeitlimit(stand ? stand.stufe : 0, EINSTELLUNG.zeitlimit_ms);
+  zeichneGleichung(a, '');
+  zeichneSpur(spur);
+  $('gleichung').classList.remove('blitz');
+  $('rueck').replaceChildren();
+
+  let ansageEnde = null, hilfe = false, hilfeUhr = null;
+  const ansage = sprich(a.sprich).then(() => {
+    ansageEnde = performance.now();
+    hilfeUhr = setTimeout(() => {
+      if (!tipp || tipp.wert) return;
+      hilfe = true;
+      $('rueck').innerHTML = '<div id="weg"></div>';
+      $('weg').textContent = `Tipp: ${weg.hilfe}`;
+    }, HILFE_MS);
+  });
+  const t = await tippen(String(a.loesung).length, a);
+  if (ansageEnde === null && kannSprechen) speechSynthesis.cancel();
+  await ansage;
+  clearTimeout(hilfeUhr);
+
+  const ms = t.erste < ansageEnde ? 0 : Math.round(t.erste - ansageEnde);
+  const antwort = Number(t.wert);
+  const ergebnis = Kern.bewerte({ antwort, loesung: a.loesung, ms, limit, hilfe });
+  const warNeu = !stand;
+  if (e.versuch === 1) z.staende[e.karte.id] = Kern.naechsterStand(stand, ergebnis, z.tag.datum);
+  if (warNeu && ergebnis !== 'schnell') z.tag.neu += 1;
+  Kern.verbuche(runde, e, ergebnis, warNeu);
+  const neu = z.staende[e.karte.id];
+  z.versuche.push({
+    id: crypto.randomUUID(), sitzung, karte: e.karte.id, gezeigt: a.zeige, antwort, ergebnis, ms,
+    stufe_nach: neu.stufe, faellig_am: neu.faellig, beantwortet_am: new Date().toISOString(),
+  });
+  speichere();
+  gerechnet += 1;
+
+  if (antwort !== a.loesung) {
+    spur.push('gut');
+    zeichneSpur(spur);
+    zeichneGleichung(a, String(a.loesung), true);
+    $('rueck').innerHTML = '<div id="weg"></div>';
+    $('weg').textContent = weg.weg;
+    await sprich(a.korrektur);
+    await warte(2000);
+    return;
+  }
+  const schnell = ergebnis === 'schnell';
+  if (schnell) blitze += 1;
+  spur.push(schnell ? 'schnell' : 'gut');
+  zeichneSpur(spur);
+  zeichneGleichung(a, t.wert, true);
+  $('gleichung').classList.toggle('blitz', schnell);
+  $('rueck').innerHTML = schnell ? BLITZ : HAKEN;
+  await warte(schnell ? 800 : 900);
+}
+
+async function spiele() {
+  const spur = [];
+  for (let e = Kern.naechste(runde, z.staende); e; e = Kern.naechste(runde, z.staende)) await stelle(e, spur);
+  zeigeEnde();
+}
+
+// Läuft ohne await bis zur ersten Ansage: iOS spricht nur, wenn sie direkt im Tipp startet.
+function starten() {
+  const datum = tagesstand();
+  if (kannSprechen && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+  runde = Kern.starteRunde(z.staende, EINSTELLUNG, datum, z.tag.neu, Math.random);
+  sitzung = crypto.randomUUID();
+  gerechnet = 0;
+  blitze = 0;
+  zeige('runde');
+  spiele();
+}
+
+function istMehrDa() {
+  return Kern.istMehrDa(z.staende, tagesstand(), z.tag.neu, EINSTELLUNG);
+}
+
+function zeigeEnde() {
+  const mehr = istMehrDa();
+  $('bilanz').textContent = gerechnet === 1 ? 'Du hast 1 Aufgabe gerechnet.' : `Du hast ${gerechnet} Aufgaben gerechnet.`;
+  $('blitzzahl').textContent = blitze;
+  $('blitze').hidden = blitze === 0;
+  $('ausblick').textContent = mehr ? '' : 'Morgen geht es weiter.';
+  $('mehr').hidden = !mehr;
+  zeige('ende');
+}
+
+function zeigeStart() {
+  const mehr = istMehrDa();
+  schreibe($('vorne'), [...'1+1=2'].map((text) => ({ text })));
+  $('anrede').textContent = mehr ? 'Bereit für deine Runde?' : 'Für heute ist alles geschafft. Morgen geht es weiter.';
+  $('los').hidden = !mehr;
+  zeige('start');
+}
+
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].forEach((n) => {
+  const b = document.createElement('button');
+  b.textContent = n;
+  b.dataset.z = n;
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); ziffer(String(n), e.timeStamp); });
+  $('pad').append(b);
+});
+document.addEventListener('keydown', (e) => { if (/^[0-9]$/.test(e.key) && !e.repeat) ziffer(e.key, e.timeStamp); });
+
+if (kannSprechen) stimmenLaden().then((alle) => { stimme = waehle(alle); });
+$('los').addEventListener('click', starten);
+$('mehr').addEventListener('click', starten);
+zeigeStart();
+</script>
+</body>
+</html>
