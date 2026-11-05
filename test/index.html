@@ -42,7 +42,7 @@ textarea { width: 100%; height: 170px; padding: 10px; font: 13px/1.4 ui-monospac
   <section id="start">
     <h1>Technik-Test</h1>
     <p>Prüft auf diesem Handy die Sprachausgabe und die Zeitmessung. Das dauert etwa zwei Minuten.</p>
-    <p class="leise">Bitte den Medien-Ton laut stellen. Es werden keine Daten gespeichert oder verschickt.</p>
+    <p class="leise">Bitte den Medien-Ton laut stellen und die Stummschaltung ausschalten. Es werden keine Daten gespeichert oder verschickt.</p>
     <button class="haupt" id="los">Test starten</button>
   </section>
 
@@ -142,10 +142,8 @@ function sprich(text) {
 }
 
 async function pruefeStimme() {
-  zeige('lauf');
   const netz = navigator.onLine ? 'online' : 'offline';
   if (!('speechSynthesis' in window)) { laeufe.push({ netz, keineApi: true }); return false; }
-  speechSynthesis.cancel();
   const alle = await stimmenLaden();
   stimme = waehle(alle);
   const lauf = { netz, gesamt: alle.length, deutsch: alle.filter(istDeutsch), stimme, ansagen: [] };
@@ -297,12 +295,20 @@ async function teilen() {
   $('pad').append(b);
 });
 
-$('los').addEventListener('click', async () => {
-  if (await pruefeStimme()) await rechenrunde();
-  zeigeErgebnis();
-});
-$('nochmal').addEventListener('click', async () => { await pruefeStimme(); zeigeErgebnis(); });
-$('wieder').addEventListener('click', async () => { await rechenrunde(); zeigeErgebnis(); });
+// iOS verwirft speak() ohne Tipp stumm: Die erste Ansage muss direkt im Tipp starten.
+const imTipp = (ablauf) => () => {
+  zeige('lauf');
+  $('fortschritt').textContent = '';
+  const kannSprechen = 'speechSynthesis' in window;
+  if (kannSprechen && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
+  const auftakt = kannSprechen ? sprich('Es geht los') : null;
+  Promise.resolve(auftakt).then(ablauf).then(zeigeErgebnis);
+};
+
+if ('speechSynthesis' in window) stimmenLaden().then((alle) => { stimme = waehle(alle); });
+$('los').addEventListener('click', imTipp(async () => { if (await pruefeStimme()) await rechenrunde(); }));
+$('nochmal').addEventListener('click', imTipp(pruefeStimme));
+$('wieder').addEventListener('click', imTipp(rechenrunde));
 $('teilen').addEventListener('click', teilen);
 </script>
 </body>
