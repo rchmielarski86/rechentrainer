@@ -155,6 +155,33 @@ async function ganzeRunde(seite) {
   assert.ok(backend.zeilen.every((v) => /^[pmxd]_\d{1,2}_\d{1,2}$/.test(v.karte)));
 }
 
+async function extraRunde(seite) {
+  await leeren(seite);
+  backend.einstellung = { zeitlimit_ms: 5000, aufgaben_pro_runde: 3, neue_pro_tag: 0 };
+  await seite.reload();
+  await seite.waitForFunction(() => document.getElementById('los').textContent === 'Noch eine Runde');
+  const spiele = async () => {
+    for (;;) {
+      const t = await sichtbar(seite);
+      if (!t) return;
+      await tippe(seite, loese(t));
+    }
+  };
+  await seite.tap('#los');
+  await spiele();
+  assert.ok(await seite.isVisible('#mehr'), 'Keine weitere Runde möglich');
+  await seite.waitForFunction(() => JSON.parse(localStorage.getItem('rechentrainer-v2-nutzer-1')).offen.length === 0);
+  const vorher = (await stand(seite)).staende;
+  assert.strictEqual(Object.keys(vorher).length, 3, 'Bekannte neue Karten füllen die Extrarunde');
+  await seite.tap('#mehr');
+  await seite.waitForFunction(() => document.getElementById('ende').hidden);
+  await spiele();
+  await seite.waitForFunction(() => JSON.parse(localStorage.getItem('rechentrainer-v2-nutzer-1')).offen.length === 0);
+  const nachher = (await stand(seite)).staende;
+  for (const [id, s] of Object.entries(vorher)) assert.deepStrictEqual(nachher[id], s, `Wiedervorlage von ${id} verändert`);
+  backend.einstellung = null;
+}
+
 (async () => {
   const bett = await starteTestbett(FORMAT);
   backend = bett.backend;
@@ -163,7 +190,7 @@ async function ganzeRunde(seite) {
   await seite.evaluate(() => document.fonts.ready);
   await bild(seite, 'start');
 
-  for (const [name, fn] of Object.entries({ layoutPasst, erstHoeren, antwortWaehrendAnsage, falschUndWiederkehr, zeitAbgelaufen, ganzeRunde })) {
+  for (const [name, fn] of Object.entries({ layoutPasst, erstHoeren, antwortWaehrendAnsage, falschUndWiederkehr, zeitAbgelaufen, ganzeRunde, extraRunde })) {
     await fn(seite);
     console.log(`ok  ${name}`);
   }

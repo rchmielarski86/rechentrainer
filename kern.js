@@ -8,6 +8,7 @@
   const STUFE_BEI_BEKANNT = 3;
   const STUFE_FUER_UMKEHR = 2;
   const STUFE_SICHER = 4;
+  const NEUE_IN_EXTRARUNDE = 2;
 
   function rangPlus(a, b) {
     if (a === b) return 0;
@@ -145,6 +146,17 @@
     };
   }
 
+  // Freiwilliges Weiterüben: die schwächsten Karten, ohne die Wiedervorlage zu verändern.
+  function starteExtraRunde(staende, einstellung, zufall) {
+    const max = einstellung.aufgaben_pro_runde;
+    const schwach = KARTEN.filter((k) => staende[k.id])
+      .sort((k, l) => staende[k.id].stufe - staende[l.id].stufe || staende[k.id].faellig.localeCompare(staende[l.id].faellig));
+    return {
+      max, gestellt: 0, neuRest: NEUE_IN_EXTRARUNDE,
+      plan: mischen(schwach.slice(0, max), zufall).map((karte) => ({ karte, versuch: 1, ab: 0, frei: true })),
+    };
+  }
+
   function naechste(runde, staende) {
     if (runde.gestellt >= runde.max) return null;
     const wieder = runde.plan.findIndex((e) => e.versuch > 1 && e.ab <= runde.gestellt);
@@ -177,14 +189,15 @@
     return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
   };
 
-  // Zählt nur den ersten Versuch je Karte und Runde: Die Wiederholung kurz nach der Lösung sagt nichts über das Können.
+  // Zählt nur den ersten Versuch je Karte und Tag: Wiederholungen derselben Karte sagen nichts über das Können.
   function auswertung(versuche, staende, datum) {
     const gesehen = new Set();
     const zeilen = [...versuche].sort((a, b) => a.beantwortet_am.localeCompare(b.beantwortet_am)).map((v) => {
-      const schluessel = `${v.sitzung}|${v.karte}`;
+      const tag = heute(new Date(v.beantwortet_am));
+      const schluessel = `${tag}|${v.karte}`;
       const erster = !gesehen.has(schluessel);
       gesehen.add(schluessel);
-      return { ...v, erster, tag: heute(new Date(v.beantwortet_am)) };
+      return { ...v, erster, tag };
     });
     const woche = (i) => {
       const bis = addiereTage(datum, -7 * i), von = addiereTage(bis, -6);
@@ -214,7 +227,7 @@
 
   const Kern = {
     ZAHLEN, KARTEN, PRO_ID, aufgabe, rechenweg, bewerte, addiereTage, heute, naechsterStand,
-    faelligeKarten, naechsteNeue, starteRunde, naechste, verbuche, erwartet, istMehrDa, auswertung,
+    faelligeKarten, naechsteNeue, starteRunde, starteExtraRunde, naechste, verbuche, erwartet, istMehrDa, auswertung,
   };
   if (typeof module !== 'undefined') module.exports = Kern;
   else global.Kern = Kern;

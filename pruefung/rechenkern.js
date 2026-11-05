@@ -104,6 +104,14 @@ const pruefungen = {
     const r = K.starteRunde(st, EIN, TAG, 0, zufall);
     assert.strictEqual(r.plan.length, 20);
   },
+  'Extrarunde nimmt die schwächsten Karten und lässt Neues zu': () => {
+    const st = { p_2_2: { stufe: 5, faellig: '2026-12-01' }, p_3_3: { stufe: 1, faellig: '2026-11-07' }, p_4_4: { stufe: 2, faellig: '2026-11-08' } };
+    const kurz = { ...EIN, aufgaben_pro_runde: 2 };
+    const ids = K.starteExtraRunde(st, kurz, zufall).plan.map((e) => e.karte.id).sort();
+    assert.deepStrictEqual(ids, ['p_3_3', 'p_4_4']);
+    assert.ok(K.starteExtraRunde(st, kurz, zufall).plan.every((e) => e.frei));
+    assert.strictEqual(K.starteExtraRunde({}, EIN, zufall).neuRest, 2);
+  },
   'Auswertung zählt nur erste Versuche': () => {
     const am = (tag, std) => `${tag}T${std}:00:00+01:00`;
     const v = (sitzung, karte, ergebnis, ms, tag, std) => ({ sitzung, karte, ergebnis, ms, beantwortet_am: am(tag, std) });
@@ -111,9 +119,10 @@ const pruefungen = {
       v('a', 'p_7_8', 'falsch', 5000, '2026-11-02', '10'), v('a', 'p_7_8', 'schnell', 900, '2026-11-02', '11'),
       v('a', 'x_6_7', 'schnell', 1000, '2026-11-02', '12'), v('b', 'p_7_8', 'langsam', 5000, '2026-11-06', '10'),
       v('b', 'x_6_7', 'schnell', 3000, '2026-11-06', '11'), v('c', 'x_3_4', 'schnell', 500, '2026-10-20', '10'),
+      v('d', 'p_7_8', 'schnell', 400, '2026-11-06', '15'),
     ];
     const a = K.auswertung(versuche, { p_7_8: { stufe: 1 }, x_6_7: { stufe: 4 } }, TAG);
-    assert.deepStrictEqual([a.woche.tage, a.woche.aufgaben, a.woche.quote, a.woche.medianMs], [2, 5, 0.5, 2000]);
+    assert.deepStrictEqual([a.woche.tage, a.woche.aufgaben, a.woche.quote, a.woche.medianMs], [2, 6, 0.5, 2000]);
     assert.strictEqual(a.verlauf[2].quote, 1);
     assert.deepStrictEqual(a.karten.find((k) => k.art === 'mal'), { art: 'mal', gesamt: 36, gesehen: 1, sicher: 1 });
     assert.deepStrictEqual(a.wackel, [{ text: '7 + 8', anzahl: 2 }]);

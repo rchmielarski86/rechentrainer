@@ -332,7 +332,7 @@ async function stelle(e, spur) {
   const zahl = zeitUm ? null : Number(t.wert);
   const ergebnis = Kern.bewerte(zahl, a.loesung);
   const warNeu = !stand;
-  if (e.versuch === 1) z.staende[e.karte.id] = Kern.naechsterStand(stand, ergebnis, z.tag.datum);
+  if (e.versuch === 1 && !e.frei) z.staende[e.karte.id] = Kern.naechsterStand(stand, ergebnis, z.tag.datum);
   if (warNeu && ergebnis !== 'schnell') z.tag.neu += 1;
   Kern.verbuche(runde, e, ergebnis, warNeu);
   const neu = z.staende[e.karte.id];
@@ -369,7 +369,9 @@ async function spiele() {
 function starten() {
   const datum = tagesstand();
   if (kannSprechen && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel();
-  runde = Kern.starteRunde(z.staende, z.einstellung, datum, z.tag.neu, Math.random);
+  runde = istMehrDa()
+    ? Kern.starteRunde(z.staende, z.einstellung, datum, z.tag.neu, Math.random)
+    : Kern.starteExtraRunde(z.staende, z.einstellung, Math.random);
   sitzung = crypto.randomUUID();
   rundeAktiv = true;
   gerechnet = 0;
@@ -399,8 +401,7 @@ function zeigeEnde() {
   $('bilanz').textContent = gerechnet === 1 ? 'Du hast 1 Aufgabe gerechnet.' : `Du hast ${gerechnet} Aufgaben gerechnet.`;
   $('blitzzahl').textContent = blitze;
   $('blitze').hidden = blitze === 0;
-  $('ausblick').textContent = mehr ? '' : 'Morgen geht es weiter.';
-  $('mehr').hidden = !mehr;
+  $('ausblick').textContent = mehr ? '' : 'Dein Tagesziel ist geschafft.';
   zeige('ende');
   synchronisiere();
 }
@@ -408,8 +409,8 @@ function zeigeEnde() {
 function zeigeStart() {
   const mehr = istMehrDa();
   schreibe($('vorne'), [...'1+1=2'].map((text) => ({ text })));
-  $('anrede').textContent = mehr ? 'Bereit für deine Runde?' : 'Für heute ist alles geschafft. Morgen geht es weiter.';
-  $('los').hidden = !mehr;
+  $('anrede').textContent = mehr ? 'Bereit für deine Runde?' : 'Dein Tagesziel ist geschafft. Du kannst freiwillig weiterüben.';
+  $('los').textContent = mehr ? "Los geht's" : 'Noch eine Runde';
   zeige('start');
 }
 
